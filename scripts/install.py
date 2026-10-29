@@ -93,7 +93,8 @@ def configure(config, python, root, rtk, replace=False):
         raise ValueError('Configuration symbolique : modifier sa source explicitement.')
     original = config.read_bytes() if config.exists() else b''
     before = tomllib.loads(original.decode())
-    paths = list(dict.fromkeys([str(Path(rtk).parent), *os.defpath.split(os.pathsep)]))
+    tools = [rtk, *(path for name in ('rg', 'git') if (path := shutil.which(name)))]
+    paths = list(dict.fromkeys([*(str(Path(path).parent) for path in tools), *os.defpath.split(os.pathsep)]))
     entry = {'command': str(rtk),
              'args': ['proxy', str(python), str(Path(__file__).resolve().with_name('mcp_server.py'))],
              'startup_timeout_sec': 20, 'tool_timeout_sec': 3700,

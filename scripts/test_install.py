@@ -3,11 +3,20 @@ from pathlib import Path
 import tempfile
 import tomllib
 import unittest
+from unittest.mock import patch
 
 import install
 
 
 class InstallTest(unittest.TestCase):
+    def test_keeps_installed_command_directories(self):
+        with tempfile.TemporaryDirectory(dir=os.environ['TASK_WORKSPACE']) as tmp:
+            with patch('install.shutil.which', side_effect={'rg': '/search/bin/rg', 'git': '/git/bin/git'}.get):
+                entry = install.configure(Path(tmp) / 'config.toml', '/python', Path(tmp), '/rtk/bin/rtk')
+            paths = entry['env']['PATH'].split(os.pathsep)
+            self.assertIn('/search/bin', paths)
+            self.assertIn('/git/bin', paths)
+
     def test_preserves_configuration_and_is_idempotent(self):
         with tempfile.TemporaryDirectory(dir=os.environ['TASK_WORKSPACE']) as tmp:
             config = Path(tmp) / 'config.toml'
