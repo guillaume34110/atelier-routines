@@ -1,0 +1,9 @@
+{
+  "name": "atelier-project-review",
+  "description": "Statut et diffs Git puis références ciblées, sans modifier les sources.",
+  "inputs": {"term": {"type": "string", "default": "TODO"}},
+  "steps": [
+    {"id": "git.status", "params": {}},
+    {"id": "project.search", "params": {"pattern": {"$input": "term"}, "path": "."}}
+  ]
+}
