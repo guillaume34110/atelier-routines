@@ -20,13 +20,20 @@ GITLEAKS = {
     ('Linux', 'aarch64'): ('linux_arm64', 'e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080'),
     ('Linux', 'x86_64'): ('linux_x64', '551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb'),
 }
+RG = {
+    ('Darwin', 'arm64'): ('aarch64-apple-darwin', '378e973289176ca0c6054054ee7f631a065874a352bf43f0fa60ef079b6ba715'),
+    ('Darwin', 'x86_64'): ('x86_64-apple-darwin', '64811cb24e77cac3057d6c40b63ac9becf9082eedd54ca411b475b755d334882'),
+    ('Linux', 'aarch64'): ('aarch64-unknown-linux-gnu', '2b661c6ef508e902f388e9098d9c4c5aca72c87b55922d94abdba830b4dc885e'),
+    ('Linux', 'x86_64'): ('x86_64-unknown-linux-musl', '1c9297be4a084eea7ecaedf93eb03d058d6faae29bbc57ecdaf5063921491599'),
+}
 
 
 def install(tool, destination):
     key = (platform.system(), platform.machine())
-    tag, expected = (RTK if tool == 'rtk' else GITLEAKS)[key]
-    url = (f'https://github.com/rtk-ai/rtk/releases/download/v1.1.0/rtk-oss-{tag}.tar.gz' if tool == 'rtk'
-           else f'https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_{tag}.tar.gz')
+    tag, expected = {'rtk': RTK, 'rg': RG, 'gitleaks': GITLEAKS}[tool][key]
+    url = {'rtk': f'https://github.com/rtk-ai/rtk/releases/download/v1.1.0/rtk-oss-{tag}.tar.gz',
+           'rg': f'https://github.com/BurntSushi/ripgrep/releases/download/15.1.0/ripgrep-15.1.0-{tag}.tar.gz',
+           'gitleaks': f'https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_{tag}.tar.gz'}[tool]
     with urllib.request.urlopen(url, timeout=30) as response:
         data = response.read(20 * 1024 * 1024 + 1)
     if len(data) > 20 * 1024 * 1024 or hashlib.sha256(data).hexdigest() != expected:
@@ -43,14 +50,14 @@ def install(tool, destination):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--tool', choices=('rtk', 'gitleaks', 'both'), default='both')
+    parser.add_argument('--tool', choices=('rtk', 'rg', 'gitleaks', 'both', 'verify'), default='both')
     args = parser.parse_args()
     base = os.environ.get('TASK_WORKSPACE') or os.environ.get('RUNNER_TEMP')
     if not base:
         raise SystemExit('Run inside the task guard or GitHub Actions.')
     destination = Path(base) / 'routines-tools'
     destination.mkdir(mode=0o700, exist_ok=False)
-    for tool in ('rtk', 'gitleaks') if args.tool == 'both' else (args.tool,):
+    for tool in {'both': ('rtk', 'gitleaks'), 'verify': ('rtk', 'rg')}.get(args.tool, (args.tool,)):
         install(tool, destination)
     if os.environ.get('GITHUB_PATH'):
         with open(os.environ['GITHUB_PATH'], 'a') as paths:

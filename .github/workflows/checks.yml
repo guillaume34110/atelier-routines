@@ -18,11 +18,11 @@ jobs:
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: '3.12'
-      - name: Bootstrap pinned RTK
+      - name: Bootstrap pinned RTK and ripgrep
         shell: python
         run: |
           import runpy, sys
-          sys.argv = ['ci_bootstrap.py', '--tool', 'rtk']
+          sys.argv = ['ci_bootstrap.py', '--tool', 'verify']
           runpy.run_path('scripts/ci_bootstrap.py', run_name='__main__')
       - name: Install locked SDK
         run: rtk proxy python -m pip install --require-hashes -r requirements.lock
