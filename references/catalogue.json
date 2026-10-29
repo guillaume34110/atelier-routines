@@ -1,0 +1,1578 @@
+[
+  {
+    "id": "project.tree",
+    "kind": "command",
+    "description": "Inventaire borné sans parcourir les dépendances et sorties.",
+    "command": "rtk proxy atelier-routines tree --project PROJET",
+    "boundary": "Comptages de chemins hors exclusions ; aucun contenu de média ou CLAUDE.md lu.",
+    "triggers": [
+      "arborescence",
+      "inventaire fichiers",
+      "project tree"
+    ]
+  },
+  {
+    "id": "project.outline",
+    "kind": "command",
+    "description": "Déclarations Python et lignes, sans copier le fichier dans le chat.",
+    "command": "rtk proxy atelier-routines outline --file FICHIER.py",
+    "boundary": "Inspection AST limitée à 2 Mio et 30 déclarations affichées ; aucune exécution du code.",
+    "triggers": [
+      "déclarations python",
+      "outline python",
+      "fonctions fichier"
+    ]
+  },
+  {
+    "id": "system.context",
+    "kind": "command",
+    "description": "Résumé du projet sans relire ses sources.",
+    "command": "rtk proxy atelier-routines context --project PROJET",
+    "boundary": "Manifestes, chemins CI et statut Git seulement ; aucun contrôle exécuté.",
+    "triggers": [
+      "contexte projet",
+      "inspecter projet",
+      "résumé projet"
+    ]
+  },
+  {
+    "id": "system.preflight",
+    "kind": "command",
+    "description": "Espace disque, pression mémoire et swap actuels.",
+    "command": "rtk proxy atelier-routines preflight --project PROJET",
+    "boundary": "Observation ponctuelle ; le garde canonique décide de l'admission.",
+    "triggers": [
+      "préflight",
+      "pré requis ressources",
+      "espace disque"
+    ]
+  },
+  {
+    "id": "system.storage",
+    "kind": "command",
+    "description": "Contrôle canonique avant une opération de plus de 1 Gio.",
+    "command": "rtk proxy atelier-routines storage --project DESTINATION --gib PIC_PREVU",
+    "source": "~/.local/bin/storage-guard.py",
+    "boundary": "Déclarer le pic total, pas seulement la taille finale.",
+    "triggers": [
+      "stockage",
+      "storage guard",
+      "pic disque"
+    ]
+  },
+  {
+    "id": "system.budget",
+    "kind": "command",
+    "description": "Exécution sous garde temporaire, sans reconstruire la commande.",
+    "command": "rtk proxy atelier-routines budget --project PROJET --gib 0.1 -- rtk COMMANDE",
+    "source": "~/.local/bin/workspace-budget.py",
+    "boundary": "Sorties dans TASK_WORKSPACE ; ne pas réutiliser un espace existant sans préserver puis nettoyer sa propre passe.",
+    "triggers": [
+      "budget temporaire",
+      "workspace budget",
+      "garde temporaire"
+    ]
+  },
+  {
+    "id": "system.snapshot",
+    "kind": "command",
+    "description": "Seule copie QA autorisée, avec exclusions et plafond existants.",
+    "command": "rtk proxy atelier-routines snapshot --project PROJET",
+    "source": "~/.local/bin/workspace-budget.py",
+    "boundary": "Seulement si servir le projet ou son build existant ne suffit pas.",
+    "triggers": [
+      "copie qa",
+      "snapshot qa",
+      "snapshot"
+    ]
+  },
+  {
+    "id": "system.vps",
+    "kind": "procedure",
+    "description": "Routage vers le calcul partagé existant.",
+    "steps": [
+      "Lire le skill atelier-vps et utiliser vps_status puis vps_run lorsqu'ils sont disponibles.",
+      "Sinon : rtk proxy ~/.local/bin/atelier-vps status.",
+      "Réserver le pic réel, récupérer et vérifier les résultats avant release."
+    ],
+    "boundary": "Aucune réservation ni exécution distante automatique par ce catalogue.",
+    "triggers": [
+      "lancer vps",
+      "calcul distant",
+      "vps run",
+      "déporter calcul"
+    ]
+  },
+  {
+    "id": "git.status",
+    "kind": "procedure",
+    "description": "Statut court du checkout actif.",
+    "command": "rtk git status --short --branch",
+    "boundary": "Dans le projet choisi ; aucun checkout, commit ni nettoyage.",
+    "triggers": [
+      "statut git",
+      "git status",
+      "état checkout"
+    ]
+  },
+  {
+    "id": "git.integration",
+    "kind": "procedure",
+    "description": "Passage vers une intégration vérifiable.",
+    "steps": [
+      "Lire les règles et workflows applicables.",
+      "Exécuter toute la validation exigée avant la poussée de branche.",
+      "Passer par une PR ; vérifier contrôles verts sur la dernière révision et branche à jour."
+    ],
+    "boundary": "Le catalogue n'autorise ni publication ni fusion et ne remplace pas les règles du projet.",
+    "triggers": [
+      "préparer intégration",
+      "avant push",
+      "avant intégration"
+    ]
+  },
+  {
+    "id": "web.checks",
+    "kind": "procedure",
+    "description": "Retrouver les checks réels sans les inventer.",
+    "command": "rtk proxy atelier-routines context --project PROJET",
+    "steps": [
+      "Lire les fichiers de workflow retournés et les scripts du manifeste.",
+      "Choisir la validation adaptée au changement ; conserver la suite obligatoire avant push."
+    ],
+    "boundary": "Une liste de scripts ne vaut pas validation.",
+    "triggers": [
+      "checks projet",
+      "validation projet",
+      "commandes ci"
+    ]
+  },
+  {
+    "id": "web.dev",
+    "kind": "procedure",
+    "description": "Réutiliser le démarrage déjà défini par le projet.",
+    "steps": [
+      "Vérifier les services existants et leur propriétaire.",
+      "Utiliser le script dev/start documenté dans le manifeste, avec une seule instance utile."
+    ],
+    "boundary": "Ne pas démarrer une seconde API ou un second watcher pour contourner un blocage.",
+    "triggers": [
+      "démarrer serveur",
+      "serveur dev",
+      "start dev",
+      "démarrer api"
+    ]
+  },
+  {
+    "id": "web.e2e",
+    "kind": "procedure",
+    "description": "Recette navigateur avec les vrais services requis.",
+    "steps": [
+      "Vérifier API, interface et données de scénario.",
+      "Réutiliser la session navigateur ; exécuter les assertions critiques.",
+      "Conserver le reçu et déclarer bloqué si un service ou une assertion manque."
+    ],
+    "boundary": "Aucun E2E lancé ni déclaré vert par cette procédure seule.",
+    "triggers": [
+      "e2e",
+      "test navigateur",
+      "end to end"
+    ]
+  },
+  {
+    "id": "audio.audition",
+    "kind": "existing-script",
+    "description": "Retrouver l'audition native déjà présente dans Ableton.",
+    "source": "~/Documents/perso/abelton/scripts/audition_native_melodic_phrase.py",
+    "steps": [
+      "Consulter l'interface --help et les règles du dépôt.",
+      "Préparer une seule relation musicale à comparer, sur les sources canoniques."
+    ],
+    "boundary": "Ce script est référencé, pas relancé ni nouvellement validé ici.",
+    "triggers": [
+      "audition",
+      "écouter phrase",
+      "ableton écoute"
+    ]
+  },
+  {
+    "id": "audio.native-e2e",
+    "kind": "existing-script",
+    "description": "Retrouver le scénario API native existant.",
+    "source": "~/Documents/perso/abelton/scripts/native_prepared_api_e2e.py",
+    "boundary": "Lire ses prérequis ; utiliser la vraie API ; aucune preuve de réussite acquise par l'index.",
+    "triggers": [
+      "api native audio",
+      "e2e audio",
+      "native e2e"
+    ]
+  },
+  {
+    "id": "audio.source-audit",
+    "kind": "existing-script",
+    "description": "Diagnostic existant des rejets de notes extraites.",
+    "source": "~/Documents/perso/abelton/services/musicgen/audit_juice_candidate_rejections.py",
+    "boundary": "Concerne les décisions conservées ; ne qualifie pas de nouvelles notes ni l'identité d'un instrument.",
+    "triggers": [
+      "notes rejetées",
+      "audit extraction",
+      "candidate rejection"
+    ]
+  },
+  {
+    "id": "audio.feedback",
+    "kind": "template",
+    "description": "Retour d'écoute court et localisable.",
+    "template": {
+      "reference": "fichier/version + timecode",
+      "keep": "ce qui doit rester identique",
+      "change": "une seule relation à corriger",
+      "target": "ce qui doit s'entendre à la place",
+      "audition": "partie isolée + même passage dans le groove",
+      "stop": "retour d'écoute de Guillaume avant extension"
+    },
+    "boundary": "Les mesures techniques ne remplacent pas l'écoute.",
+    "triggers": [
+      "retour écoute",
+      "feedback musical",
+      "écoute avis"
+    ]
+  },
+  {
+    "id": "audio.freeze",
+    "kind": "procedure",
+    "description": "Protéger le matériau déjà apprécié pendant une révision.",
+    "steps": [
+      "Identifier partition, articulations, sources, gains, backing et sélecteur réellement utilisé.",
+      "Nommer les modifications permises et conserver les empreintes utiles.",
+      "Comparer la partie modifiée seule puis dans le même mix ; conserver les preuves."
+    ],
+    "boundary": "Ne pas renormaliser ou changer le backing de façon à masquer la différence.",
+    "triggers": [
+      "figer audio",
+      "préserver morceau",
+      "freeze musique"
+    ]
+  },
+  {
+    "id": "handoff.close",
+    "kind": "template",
+    "description": "Reprise courte avec preuves conservées.",
+    "template": [
+      "Objectif borné et critère de fin",
+      "État actuel + commit et sources concernés",
+      "Dernière validation exacte + chemin de preuve",
+      "Blocage et prochaine action unique",
+      "Matériau accepté à préserver"
+    ],
+    "boundary": "Conserver l'historique ; ne pas archiver le chat principal automatiquement.",
+    "triggers": [
+      "handoff",
+      "reprise tâche",
+      "bilan tâche",
+      "fin tâche"
+    ]
+  },
+  {
+    "id": "starter.web",
+    "kind": "proposal",
+    "description": "Socle React/Vite/TypeScript à extraire après choix d'un dépôt.",
+    "steps": [
+      "Choisir une base validée parmi les projets existants.",
+      "Extraire seulement configuration, démarrage, tests et exemple minimal, sans données ni secrets.",
+      "Épingler une version et tester sa création avant usage."
+    ],
+    "boundary": "Aucun starter web n'a été créé ni testé par cet audit."
+  },
+  {
+    "id": "starter.api",
+    "kind": "proposal",
+    "description": "Socle API Python à isoler de la logique musicale.",
+    "steps": [
+      "Choisir une API minimale existante et son verrou de dépendances.",
+      "Conserver santé, configuration et un scénario réel interface/API.",
+      "Éviter de copier le service musical entier."
+    ],
+    "boundary": "Proposition ; aucune nouvelle application ni dépendance installée."
+  },
+  {
+    "id": "starter.audio",
+    "kind": "proposal",
+    "description": "Scène de référence audio avec recette et rendu comparables.",
+    "steps": [
+      "Sélectionner une phrase et une palette acceptées.",
+      "Conserver le chemin natif de lecture, les gains et la recette.",
+      "Ajouter une comparaison isolée/dans le groove avant toute génération de packs."
+    ],
+    "boundary": "Un starter technique n'est pas une composition musicalement validée."
+  },
+  {
+    "id": "project.instructions",
+    "kind": "procedure",
+    "description": "Lire les règles applicables au projet.",
+    "triggers": [
+      "instructions projet",
+      "agents règles",
+      "project instructions"
+    ],
+    "command": "rtk proxy rg --files --hidden -g AGENTS.md -g AGENTS.override.md -g '!**/node_modules/**' -g '!**/.git/**'",
+    "steps": [
+      "Lire les instructions héritées puis seulement les fichiers applicables au chemin modifié."
+    ],
+    "boundary": "Ne jamais ouvrir CLAUDE.md ; cet inventaire ne prouve pas l'absence de règles parentes."
+  },
+  {
+    "id": "project.search",
+    "kind": "procedure",
+    "description": "Trouver une occurrence dans les sources utiles.",
+    "triggers": [
+      "chercher code",
+      "rechercher symbole",
+      "search code",
+      "trouver occurrence"
+    ],
+    "command": "rtk proxy rg -n --glob '!CLAUDE.md' --glob '!**/CLAUDE.md' --glob '!**/.env*' --glob '!**/node_modules/**' --glob '!**/.git/**' -- MOTIF CHEMINS",
+    "steps": [
+      "Limiter aux chemins concernés ; analyser les gros résultats dans context-mode."
+    ],
+    "boundary": "MOTIF et CHEMINS sont des arguments littéraux ; exclure secrets et fichiers interdits."
+  },
+  {
+    "id": "project.symbol",
+    "kind": "procedure",
+    "description": "Retrouver tous les appelants avant une correction.",
+    "triggers": [
+      "appelants fonction",
+      "callers",
+      "références fonction"
+    ],
+    "steps": [
+      "Utiliser project.search sur le symbole dans les sources, tests et exports ; lire seulement les appelants concernés."
+    ],
+    "boundary": "Une référence textuelle n'établit pas une dépendance dynamique."
+  },
+  {
+    "id": "project.manifest",
+    "kind": "procedure",
+    "description": "Identifier scripts et verrous sans installer.",
+    "triggers": [
+      "scripts manifeste",
+      "package json",
+      "pyproject",
+      "manifest"
+    ],
+    "command": "rtk proxy atelier-routines context --project PROJET",
+    "steps": [
+      "Lire le script ou le verrou pertinent avant de choisir une commande."
+    ],
+    "boundary": "Aucune installation ni exécution de script."
+  },
+  {
+    "id": "project.dependencies",
+    "kind": "procedure",
+    "description": "Évaluer une dépendance avec les verrous existants.",
+    "triggers": [
+      "dépendances projet",
+      "dependency tree",
+      "doublon dépendance"
+    ],
+    "steps": [
+      "Identifier le gestionnaire dans le verrou ; réutiliser sa commande de liste ou d'explication sur le paquet ciblé."
+    ],
+    "boundary": "Pas de mise à jour globale ; consulter les sources officielles pour une version actuelle."
+  },
+  {
+    "id": "project.errors",
+    "kind": "procedure",
+    "description": "Réduire une erreur à sa première cause exploitable.",
+    "triggers": [
+      "erreur compilation",
+      "traceback",
+      "stack trace",
+      "diagnostiquer bug"
+    ],
+    "steps": [
+      "Extraire la première erreur et sa chaîne de causes depuis le journal existant ; retrouver le symbole avec project.search."
+    ],
+    "boundary": "Après un échec équivalent, changer d'hypothèse avant une relance."
+  },
+  {
+    "id": "project.config",
+    "kind": "procedure",
+    "description": "Trouver le réglage réellement consommé par le projet.",
+    "triggers": [
+      "configuration projet",
+      "variable environnement",
+      "config app"
+    ],
+    "steps": [
+      "Chercher le nom du réglage, sa lecture et sa valeur par défaut ; examiner le schéma et l'exemple sans lire les secrets."
+    ],
+    "boundary": "Ne pas imprimer .env, clés ou valeurs d'authentification."
+  },
+  {
+    "id": "project.docs",
+    "kind": "procedure",
+    "description": "Mettre à jour la documentation du comportement modifié.",
+    "triggers": [
+      "documentation projet",
+      "readme",
+      "documenter changement"
+    ],
+    "steps": [
+      "Repérer la section existante ; ajuster l'exemple et les prérequis qui changent ; vérifier les liens locaux."
+    ],
+    "boundary": "Ne pas créer un nouveau guide si la section existe."
+  },
+  {
+    "id": "git.diff",
+    "kind": "procedure",
+    "description": "Examiner uniquement les changements non indexés.",
+    "triggers": [
+      "diff git",
+      "changements locaux",
+      "unstaged"
+    ],
+    "command": "rtk git diff --stat",
+    "steps": [
+      "Lire ensuite le diff des seuls fichiers concernés avec rtk git diff -- CHEMINS."
+    ],
+    "boundary": "Préserver les changements étrangers à la tâche."
+  },
+  {
+    "id": "git.staged",
+    "kind": "procedure",
+    "description": "Examiner ce qui sera réellement commité.",
+    "triggers": [
+      "staged",
+      "index git",
+      "changements indexés"
+    ],
+    "command": "rtk git diff --cached --stat",
+    "steps": [
+      "Lire rtk git diff --cached -- CHEMINS avant un commit."
+    ],
+    "boundary": "La présence dans l'index ne vaut pas validation."
+  },
+  {
+    "id": "git.log",
+    "kind": "procedure",
+    "description": "Retrouver les derniers changements du périmètre.",
+    "triggers": [
+      "historique git",
+      "git log",
+      "derniers commits"
+    ],
+    "command": "rtk git log -8 --oneline -- CHEMIN",
+    "steps": [
+      "Limiter le chemin et lire le commit utile seulement."
+    ],
+    "boundary": "Historique court ; ne pas charger le dépôt entier."
+  },
+  {
+    "id": "git.blame",
+    "kind": "procedure",
+    "description": "Retrouver l'origine d'une ligne précise.",
+    "triggers": [
+      "git blame",
+      "origine ligne",
+      "qui modifié"
+    ],
+    "command": "rtk proxy git blame -L DEBUT,FIN -- CHEMIN",
+    "steps": [
+      "Lire le commit à l'origine du comportement avant de le corriger."
+    ],
+    "boundary": "Choisir une plage courte ; aucun jugement sur l'auteur."
+  },
+  {
+    "id": "git.branches",
+    "kind": "procedure",
+    "description": "Inspecter branche active et cible.",
+    "triggers": [
+      "branches git",
+      "branche active",
+      "git branch"
+    ],
+    "command": "rtk proxy git branch -vv",
+    "steps": [
+      "Identifier la cible dans les règles ou la PR ; vérifier la divergence avec les références disponibles."
+    ],
+    "boundary": "Une référence locale peut être périmée."
+  },
+  {
+    "id": "git.worktrees",
+    "kind": "procedure",
+    "description": "Réutiliser le checkout isolé déjà attaché.",
+    "triggers": [
+      "worktree",
+      "checkout isolé"
+    ],
+    "steps": [
+      "Utiliser list_artifacts puis réutiliser le worktree pertinent ; créer seulement si nécessaire selon la politique du dépôt."
+    ],
+    "boundary": "Ne pas supprimer ni archiver un checkout encore utilisé."
+  },
+  {
+    "id": "git.branch",
+    "kind": "procedure",
+    "description": "Créer une branche conforme au projet et à Shortcut.",
+    "triggers": [
+      "créer branche",
+      "nouvelle branche",
+      "create branch"
+    ],
+    "steps": [
+      "Utiliser Git Helpers si fourni, sinon identité/sc-ID/titre-normalisé ; créer depuis la base vérifiée dans le checkout autorisé."
+    ],
+    "boundary": "Pas de préfixe codex/, d'espaces ou de crochets ; aucune poussée directe sur l'intégration."
+  },
+  {
+    "id": "git.commit",
+    "kind": "procedure",
+    "description": "Préparer un commit attribué à l'identité configurée.",
+    "triggers": [
+      "commit",
+      "commiter",
+      "valider modifications"
+    ],
+    "steps": [
+      "Examiner git.diff et git.staged ; indexer les seuls fichiers de la tâche ; suivre les contrôles requis et le message du projet."
+    ],
+    "boundary": "Préserver l'identité Git ; référence [sc-ID] si applicable ; aucune attribution assistant."
+  },
+  {
+    "id": "git.conflict",
+    "kind": "procedure",
+    "description": "Résoudre un conflit en conservant les deux intentions.",
+    "triggers": [
+      "conflit git",
+      "merge conflict",
+      "rebase conflict"
+    ],
+    "steps": [
+      "Lire le statut, les deux versions et leurs appelants ; résoudre le mécanisme puis exécuter la validation requise."
+    ],
+    "boundary": "Ne pas écraser les changements locaux ni abandonner une opération étrangère."
+  },
+  {
+    "id": "git.pr-create",
+    "kind": "procedure",
+    "description": "Créer une PR après validation complète.",
+    "triggers": [
+      "créer pr",
+      "ouvrir pull request",
+      "create pull request"
+    ],
+    "steps": [
+      "Lire les workflows, exécuter les checks obligatoires, pousser la branche de travail ; créer la PR et appeler attach_artifact avec son URL."
+    ],
+    "boundary": "CI locale bloquée = poussée bloquée ; titre [sc-ID] si applicable."
+  },
+  {
+    "id": "git.pr-review",
+    "kind": "procedure",
+    "description": "Relire une PR avec ses appelants et ses assertions.",
+    "triggers": [
+      "review pr",
+      "revoir pull request",
+      "code review"
+    ],
+    "steps": [
+      "Lire le diff et le code connecté ; vérifier les régressions concrètes ; commenter seulement les constats démontrables."
+    ],
+    "boundary": "Ne pas publier de commentaire sans autorisation ; lire une PR ne valide pas ses checks."
+  },
+  {
+    "id": "git.pr-checks",
+    "kind": "procedure",
+    "description": "Vérifier les checks de la dernière révision.",
+    "triggers": [
+      "ci rouge",
+      "checks pr",
+      "pipeline échoué",
+      "ci logs"
+    ],
+    "steps": [
+      "Utiliser read_pull_request_check_diagnostics ; garder headRevision pour chaque détail et lire la première défaillance utile."
+    ],
+    "boundary": "Checks absents, annulés ou en cours ne sont pas verts."
+  },
+  {
+    "id": "git.protection",
+    "kind": "procedure",
+    "description": "Vérifier les protections de la branche cible.",
+    "triggers": [
+      "protections github",
+      "branch protection",
+      "règles fusion"
+    ],
+    "steps": [
+      "Inspecter les règles GitHub effectives : PR, checks requis, branche à jour et administrateurs ; signaler précisément une restriction de droits."
+    ],
+    "boundary": "Ne pas modifier l'offre, la visibilité ou les protections."
+  },
+  {
+    "id": "git.merge",
+    "kind": "procedure",
+    "description": "Fusionner seulement une PR validée à jour.",
+    "triggers": [
+      "fusionner pr",
+      "merge pr",
+      "intégrer branche"
+    ],
+    "steps": [
+      "Vérifier la dernière révision, tous les checks requis et l'absence de divergence ; utiliser la fusion standard autorisée."
+    ],
+    "boundary": "Une fusion doit être demandée ou autorisée ; aucun --admin ni contournement."
+  },
+  {
+    "id": "git.remote",
+    "kind": "procedure",
+    "description": "Identifier le dépôt distant avant une action GitHub.",
+    "triggers": [
+      "remote git",
+      "dépôt github",
+      "git remote"
+    ],
+    "command": "rtk proxy git config --get remote.origin.url",
+    "steps": [
+      "Utiliser la connexion et le dépôt correspondants pour les outils GitHub."
+    ],
+    "boundary": "Ne pas imprimer une URL contenant des identifiants ; filtrer la sortie avant affichage."
+  },
+  {
+    "id": "checks.lint",
+    "kind": "procedure",
+    "description": "Exécuter le lint défini par le projet.",
+    "triggers": [
+      "lint",
+      "eslint",
+      "ruff"
+    ],
+    "steps": [
+      "Retrouver la commande dans le manifeste et les workflows ; lancer via system.vps ; restituer seulement les erreurs utiles."
+    ],
+    "boundary": "Ne pas désactiver de règle pour rendre le check vert."
+  },
+  {
+    "id": "checks.types",
+    "kind": "procedure",
+    "description": "Exécuter les vérifications de types existantes.",
+    "triggers": [
+      "types",
+      "typecheck",
+      "tsc",
+      "mypy",
+      "pyright"
+    ],
+    "steps": [
+      "Lire le script et la configuration de types ; exécuter la commande canonique via system.vps."
+    ],
+    "boundary": "Un fichier isolé ne remplace pas le check requis du projet."
+  },
+  {
+    "id": "checks.unit",
+    "kind": "procedure",
+    "description": "Exécuter les tests unitaires du composant modifié.",
+    "triggers": [
+      "tests unitaires",
+      "test unitaire",
+      "unit tests",
+      "unittest"
+    ],
+    "steps": [
+      "Identifier les tests du comportement ; lancer la commande existante sur VPS et examiner les assertions."
+    ],
+    "boundary": "Ne pas présenter ce sous-ensemble comme la non-régression complète."
+  },
+  {
+    "id": "checks.regression",
+    "kind": "procedure",
+    "description": "Exécuter toute la non-régression requise.",
+    "triggers": [
+      "non régression",
+      "régression complète",
+      "full test suite",
+      "tous tests"
+    ],
+    "steps": [
+      "Lire tous les workflows applicables ; exécuter suites, matrice et prérequis obligatoires via system.vps."
+    ],
+    "boundary": "Aucune suite ciblée ne remplace les contrôles avant push."
+  },
+  {
+    "id": "checks.build",
+    "kind": "procedure",
+    "description": "Construire avec le verrou et la cible du projet.",
+    "triggers": [
+      "build",
+      "compiler projet",
+      "compilation projet"
+    ],
+    "steps": [
+      "Retrouver la commande CI, ses dépendances et son architecture ; réserver le pic puis construire via system.vps."
+    ],
+    "boundary": "Une compilation arrêtée, incomplète ou hors budget est un échec."
+  },
+  {
+    "id": "checks.integration",
+    "kind": "procedure",
+    "description": "Exécuter le scénario d'intégration avec ses services.",
+    "triggers": [
+      "tests intégration",
+      "test integration",
+      "integration tests"
+    ],
+    "steps": [
+      "Lire les prérequis ; démarrer API et autres services requis ; exécuter les assertions puis préserver le reçu."
+    ],
+    "boundary": "Un service manquant bloque le test ; ne pas utiliser un mock pour prétendre valider l'intégration réelle."
+  },
+  {
+    "id": "checks.coverage",
+    "kind": "procedure",
+    "description": "Inspecter la couverture produite par la suite existante.",
+    "triggers": [
+      "couverture tests",
+      "coverage"
+    ],
+    "steps": [
+      "Lire le résumé du rapport existant et les lignes modifiées non couvertes ; lancer la commande de couverture existante si nécessaire."
+    ],
+    "boundary": "Le pourcentage global seul ne démontre pas le comportement."
+  },
+  {
+    "id": "checks.failure",
+    "kind": "procedure",
+    "description": "Diagnostiquer une assertion échouée sans répétition aveugle.",
+    "triggers": [
+      "test échoué",
+      "failing test",
+      "assertion failed",
+      "pytest failed"
+    ],
+    "steps": [
+      "Lire l'assertion, ses entrées et la première cause ; formuler une hypothèse distincte avant la prochaine exécution."
+    ],
+    "boundary": "Ne pas ignorer le test, abaisser le seuil ou répéter ailleurs un calcul distant exécuté."
+  },
+  {
+    "id": "web.api-health",
+    "kind": "procedure",
+    "description": "Vérifier que l'API réelle répond sur le port attendu.",
+    "triggers": [
+      "santé api",
+      "api health",
+      "api indisponible",
+      "api down"
+    ],
+    "steps": [
+      "Identifier le port et la route de santé documentés ; effectuer une requête bornée et vérifier statut et corps attendus."
+    ],
+    "boundary": "Ne pas inventer /health ; une page HTML du frontend ne prouve pas la santé de l'API."
+  },
+  {
+    "id": "web.api-request",
+    "kind": "procedure",
+    "description": "Vérifier un endpoint avec des données de test.",
+    "triggers": [
+      "requête api",
+      "endpoint",
+      "curl api"
+    ],
+    "steps": [
+      "Lire la route et son contrat ; appeler avec un timeout et des données synthétiques ; comparer statut et schéma."
+    ],
+    "boundary": "Aucune requête mutante sur des données réelles sans autorisation."
+  },
+  {
+    "id": "web.ports",
+    "kind": "procedure",
+    "description": "Identifier le service propriétaire d'un port.",
+    "triggers": [
+      "port occupé",
+      "address already in use",
+      "port service"
+    ],
+    "command": "rtk proxy lsof -nP -iTCP:PORT -sTCP:LISTEN",
+    "steps": [
+      "Relier le PID au projet ; réutiliser le service adéquat."
+    ],
+    "boundary": "Ne pas tuer le service pour libérer artificiellement le port."
+  },
+  {
+    "id": "web.console",
+    "kind": "procedure",
+    "description": "Extraire les erreurs console de la session de recette.",
+    "triggers": [
+      "console navigateur",
+      "javascript errors",
+      "browser console"
+    ],
+    "steps": [
+      "Réutiliser la session ; enregistrer les messages dans un fichier puis extraire erreurs et source avec context-mode."
+    ],
+    "boundary": "Pas de snapshot ou de journal complet envoyé au chat ; services requis démarrés."
+  },
+  {
+    "id": "web.network",
+    "kind": "procedure",
+    "description": "Inspecter les requêtes en échec du scénario réel.",
+    "triggers": [
+      "réseau navigateur",
+      "network errors",
+      "requêtes échouées"
+    ],
+    "steps": [
+      "Capturer la requête critique dans la session existante ; relever statut, délai et réponse utile sans identifiants."
+    ],
+    "boundary": "Ne pas exposer cookies, jetons ou corps sensibles."
+  },
+  {
+    "id": "web.responsive",
+    "kind": "procedure",
+    "description": "Vérifier le même écran sur les tailles utiles.",
+    "triggers": [
+      "responsive",
+      "mobile layout",
+      "affichage mobile"
+    ],
+    "steps": [
+      "Utiliser le navigateur de recette existant ; vérifier tailles demandées, débordements et accès aux actions principales."
+    ],
+    "boundary": "Conserver les mêmes données ; un screenshot ne teste pas les interactions."
+  },
+  {
+    "id": "web.accessibility",
+    "kind": "procedure",
+    "description": "Vérifier clavier, labels et focus du parcours.",
+    "triggers": [
+      "accessibilité",
+      "accessibility",
+      "a11y",
+      "navigation clavier"
+    ],
+    "steps": [
+      "Parcourir les actions au clavier ; contrôler nom accessible, ordre et retour du focus dans la session existante."
+    ],
+    "boundary": "Un score automatique seul ne couvre pas l'usage réel."
+  },
+  {
+    "id": "web.screenshot",
+    "kind": "procedure",
+    "description": "Capturer une preuve visuelle au bon état.",
+    "triggers": [
+      "capture écran",
+      "screenshot",
+      "preuve visuelle"
+    ],
+    "steps": [
+      "Stabiliser les données et l'état ; enregistrer une capture native de la session de recette ; inspecter seulement l'image utile."
+    ],
+    "boundary": "Pas de capture d'un compte personnel sur VPS ; pas de média encodé dans le chat."
+  },
+  {
+    "id": "web.form",
+    "kind": "procedure",
+    "description": "Valider soumission, erreurs et persistance d'un formulaire.",
+    "triggers": [
+      "formulaire",
+      "form submission",
+      "validation formulaire"
+    ],
+    "steps": [
+      "Tester données valides puis erreur critique ; vérifier réponse API et état réellement persisté avec un compte de test."
+    ],
+    "boundary": "Sans API réelle, le scénario complet est bloqué."
+  },
+  {
+    "id": "files.json",
+    "kind": "procedure",
+    "description": "Inspecter un JSON sans charger le document entier.",
+    "triggers": [
+      "json",
+      "inspecter json",
+      "parse json"
+    ],
+    "steps": [
+      "Utiliser ctx_execute_file pour parser puis afficher clés, comptes et seuls champs utiles."
+    ],
+    "boundary": "Ne pas afficher les valeurs de secrets ; une erreur de parsing doit rester un échec."
+  },
+  {
+    "id": "files.csv",
+    "kind": "procedure",
+    "description": "Résumer un CSV avec le parseur standard.",
+    "triggers": [
+      "csv",
+      "tsv",
+      "table délimitée"
+    ],
+    "steps": [
+      "Utiliser ctx_execute_file avec csv.DictReader ; vérifier séparateur et en-têtes puis calculer les agrégats demandés."
+    ],
+    "boundary": "Aucune réécriture destructive ; préserver identifiants et encodage."
+  },
+  {
+    "id": "files.logs",
+    "kind": "procedure",
+    "description": "Extraire erreurs et premier mécanisme depuis un journal.",
+    "triggers": [
+      "logs",
+      "journal erreurs",
+      "log analysis"
+    ],
+    "steps": [
+      "Traiter le fichier dans context-mode ; compter les erreurs et fournir les premiers extraits causaux avec leur emplacement."
+    ],
+    "boundary": "Ne pas déplacer un gros journal dans le contexte avant de le résumer."
+  },
+  {
+    "id": "files.pdf",
+    "kind": "procedure",
+    "description": "Lire ou produire un PDF avec contrôle de rendu.",
+    "triggers": [
+      "pdf",
+      "document pdf"
+    ],
+    "steps": [
+      "Charger pdf:pdf ; extraire les pages utiles ou produire puis inspecter le rendu."
+    ],
+    "boundary": "Ne pas déclarer la mise en page validée sans inspection des pages."
+  },
+  {
+    "id": "files.docx",
+    "kind": "procedure",
+    "description": "Créer ou modifier un document Word.",
+    "triggers": [
+      "word",
+      "docx",
+      "document word"
+    ],
+    "steps": [
+      "Charger documents:documents ; éditer la source puis rendre et inspecter le résultat."
+    ],
+    "boundary": "Préserver commentaires, sections et données non concernées."
+  },
+  {
+    "id": "files.sheets",
+    "kind": "procedure",
+    "description": "Analyser ou éditer un tableur avec formules.",
+    "triggers": [
+      "xlsx",
+      "spreadsheet",
+      "tableur",
+      "excel fichier"
+    ],
+    "steps": [
+      "Charger spreadsheets:Spreadsheets ; modifier les plages nécessaires, recalculer et vérifier valeurs et formules."
+    ],
+    "boundary": "L'Excel ouvert exige excel-live-control ; préserver les formules et sources."
+  },
+  {
+    "id": "files.slides",
+    "kind": "procedure",
+    "description": "Créer ou corriger une présentation.",
+    "triggers": [
+      "présentation",
+      "powerpoint",
+      "pptx",
+      "slide deck"
+    ],
+    "steps": [
+      "Charger presentations:Presentations ; réutiliser le modèle existant et inspecter les diapositives finales."
+    ],
+    "boundary": "Respecter le format et la destination demandés."
+  },
+  {
+    "id": "files.archive",
+    "kind": "procedure",
+    "description": "Inspecter une archive avant une extraction bornée.",
+    "triggers": [
+      "archive zip",
+      "archive tar",
+      "extraire archive"
+    ],
+    "steps": [
+      "Lister noms et tailles sans extraire ; refuser traversées, chemins absolus et liens dangereux ; extraire seulement le périmètre autorisé sous budget."
+    ],
+    "boundary": "Ne pas écraser une destination ; compter le pic décompressé avant une copie de plus de 1 Gio."
+  },
+  {
+    "id": "files.download",
+    "kind": "procedure",
+    "description": "Télécharger vers la destination autorisée avec vérification.",
+    "triggers": [
+      "télécharger fichier",
+      "download file",
+      "gros téléchargement"
+    ],
+    "steps": [
+      "Vérifier URL, taille et destination ; appliquer system.storage au pic si nécessaire ; vérifier taille et empreinte après transfert."
+    ],
+    "boundary": "Ne pas changer de disque après un refus ; conserver la source si le transfert est incertain."
+  },
+  {
+    "id": "files.cleanup",
+    "kind": "procedure",
+    "description": "Nettoyer seulement les temporaires autorisés de sa passe.",
+    "triggers": [
+      "nettoyer temporaires",
+      "cleanup",
+      "purger temporaires"
+    ],
+    "steps": [
+      "Identifier propriétaire, références et processus ; conserver les preuves puis retirer les seuls temporaires de la passe autorisée."
+    ],
+    "boundary": "Cache, ancienneté et archive ne valent pas autorisation de suppression."
+  },
+  {
+    "id": "system.vps-status",
+    "kind": "procedure",
+    "description": "Lire l'admission et la capacité par serveur.",
+    "triggers": [
+      "statut vps",
+      "vps status",
+      "capacité vps"
+    ],
+    "steps": [
+      "Appeler vps_status une fois ; utiliser la capacité de chaque connexion et arch=any si portable."
+    ],
+    "boundary": "Les totaux Global ne sont pas une machine unique."
+  },
+  {
+    "id": "system.vps-wait",
+    "kind": "procedure",
+    "description": "Attendre le reçu d'un calcul existant sans sondages.",
+    "triggers": [
+      "attendre vps",
+      "vps wait",
+      "calcul en cours"
+    ],
+    "steps": [
+      "Appeler une fois vps_wait avec la référence existante ; laisser l'outil attendre son résultat."
+    ],
+    "boundary": "Un timeout ou état inconnu n'est pas un succès ; pas de relance automatique."
+  },
+  {
+    "id": "system.vps-results",
+    "kind": "procedure",
+    "description": "Récupérer et vérifier les résultats utiles d'un calcul.",
+    "triggers": [
+      "récupérer résultats vps",
+      "vps fetch",
+      "preuves vps"
+    ],
+    "steps": [
+      "Appeler vps_fetch sur reçu et sorties utiles ; vérifier SHA256 puis préserver hors task-tmp les preuves nécessaires."
+    ],
+    "boundary": "En cas d'échec de récupération, préserver le calcul distant."
+  },
+  {
+    "id": "system.vps-release",
+    "kind": "procedure",
+    "description": "Libérer son calcul terminé après conservation des preuves.",
+    "triggers": [
+      "libérer vps",
+      "vps release",
+      "terminer calcul"
+    ],
+    "steps": [
+      "Confirmer l'état terminal et la récupération vérifiée ; appeler vps_release pour cette seule référence avec results_preserved=true."
+    ],
+    "boundary": "Ne pas libérer un état incertain ni une tâche d'autrui."
+  },
+  {
+    "id": "system.processes",
+    "kind": "procedure",
+    "description": "Identifier un processus avant de le réutiliser ou l'arrêter.",
+    "triggers": [
+      "processus",
+      "process owner",
+      "service propriétaire"
+    ],
+    "command": "rtk proxy ps -p PID -o pid=,ppid=,etime=,comm=",
+    "steps": [
+      "Relier PID, parent et projet ; arrêter proprement seulement son service temporaire terminé et inutilisé."
+    ],
+    "boundary": "Ne pas tuer Codex, son GPU, un moteur audio ou une tâche active."
+  },
+  {
+    "id": "system.dependencies",
+    "kind": "procedure",
+    "description": "Installer uniquement les dépendances verrouillées nécessaires.",
+    "triggers": [
+      "installer dépendances",
+      "npm ci",
+      "pnpm install",
+      "pip install"
+    ],
+    "steps": [
+      "Vérifier verrou, architecture et besoin ; réserver le pic complet et installer via le gestionnaire existant sur la machine appropriée."
+    ],
+    "boundary": "Aucune nouvelle dépendance pour quelques lignes ; ne pas transférer node_modules ou environnements au VPS."
+  },
+  {
+    "id": "system.memory",
+    "kind": "procedure",
+    "description": "Relever pression mémoire et swap avant un gros travail.",
+    "triggers": [
+      "mémoire",
+      "memory pressure",
+      "swap",
+      "ram"
+    ],
+    "command": "rtk proxy atelier-routines preflight --project PROJET",
+    "steps": [
+      "Adapter les nouveaux lots à la pression ; réutiliser les services et déporter le calcul compatible."
+    ],
+    "boundary": "Ne pas arrêter les tâches actives ni imposer de plafond mémoire global."
+  },
+  {
+    "id": "audio.inspect",
+    "kind": "procedure",
+    "description": "Inspecter format, durée et canaux du média ciblé.",
+    "triggers": [
+      "métadonnées audio",
+      "durée audio",
+      "format wav"
+    ],
+    "steps": [
+      "Utiliser l'outil média installé sur le seul fichier ; afficher durée, fréquence, canaux et niveau utile."
+    ],
+    "boundary": "Métadonnées et niveaux ne valent pas qualité musicale."
+  },
+  {
+    "id": "audio.compose",
+    "kind": "procedure",
+    "description": "Composer une phrase avec validation d'écoute.",
+    "triggers": [
+      "composer",
+      "composition musicale",
+      "mélodie"
+    ],
+    "steps": [
+      "Charger melomaniac ; fixer une cible audible puis vérifier la phrase seule et dans le groove."
+    ],
+    "boundary": "Préserver les éléments acceptés ; aucune acceptation sans retour d'écoute."
+  },
+  {
+    "id": "audio.arrange",
+    "kind": "procedure",
+    "description": "Réviser une relation musicale sans élargir le morceau.",
+    "triggers": [
+      "arrangement",
+      "arranger",
+      "groove",
+      "phrasé"
+    ],
+    "steps": [
+      "Charger melomaniac ; identifier la relation à changer et conserver backing, gains et sources comparables."
+    ],
+    "boundary": "Ne pas modifier les poids du modèle pour contourner un défaut d'arrangement."
+  },
+  {
+    "id": "audio.midi",
+    "kind": "procedure",
+    "description": "Inspecter notes et articulation d'un MIDI.",
+    "triggers": [
+      "midi",
+      "notes midi",
+      "partition midi"
+    ],
+    "steps": [
+      "Charger melomaniac ; relever notes, timing, vélocité et articulations avec l'outil existant ; vérifier le playback."
+    ],
+    "boundary": "Le compte de notes ne prouve ni jouabilité ni musicalité."
+  },
+  {
+    "id": "audio.render",
+    "kind": "procedure",
+    "description": "Rendre la version musicale par le moteur existant.",
+    "triggers": [
+      "rendu audio",
+      "render audio",
+      "export wav"
+    ],
+    "steps": [
+      "Réutiliser le moteur et le projet ; rendre sous budget dans TASK_WORKSPACE puis vérifier fichier et écoute."
+    ],
+    "boundary": "Garder local si moteur macOS/Metal ; ne pas démarrer un doublon."
+  },
+  {
+    "id": "audio.compare",
+    "kind": "procedure",
+    "description": "Comparer deux versions au même passage et niveau.",
+    "triggers": [
+      "comparaison audio",
+      "audio ab",
+      "comparer mix"
+    ],
+    "steps": [
+      "Utiliser les mêmes sources, gains, backing et timecodes ; écouter isolé puis dans le mix et noter la différence cible."
+    ],
+    "boundary": "Ne pas renormaliser pour masquer un écart."
+  },
+  {
+    "id": "audio.latency",
+    "kind": "procedure",
+    "description": "Mesurer la latence du chemin audio réellement utilisé.",
+    "triggers": [
+      "latence audio",
+      "audio latency",
+      "décalage audio"
+    ],
+    "steps": [
+      "Identifier moteur, buffers et périphérique ; mesurer le même scénario et conserver les horodatages pertinents."
+    ],
+    "boundary": "La calibration du matériel réel reste nécessaire ; ne pas extrapoler d'un rendu hors ligne."
+  },
+  {
+    "id": "audio.model",
+    "kind": "procedure",
+    "description": "Diagnostiquer une inférence, un codec ou des poids audio.",
+    "triggers": [
+      "modèle audio",
+      "codec",
+      "inférence audio",
+      "checkpoint audio"
+    ],
+    "steps": [
+      "Charger audio-models ; identifier versions, poids et chemin d'inférence avant toute exécution."
+    ],
+    "boundary": "Préserver banques, poids et checkpoints ; la conformité technique n'est pas une acceptation musicale."
+  },
+  {
+    "id": "audio.stems",
+    "kind": "procedure",
+    "description": "Exporter les stems de la version acceptée.",
+    "triggers": [
+      "stems",
+      "pistes séparées",
+      "export stems"
+    ],
+    "steps": [
+      "Réutiliser le projet accepté ; préserver origine temporelle, durée et gains ; contrôler fichiers et somme recombinée."
+    ],
+    "boundary": "Ne pas régénérer l'arrangement ni modifier le mix sans demande."
+  },
+  {
+    "id": "audio.loop",
+    "kind": "procedure",
+    "description": "Vérifier une boucle au raccord réel.",
+    "triggers": [
+      "boucle audio",
+      "audio loop",
+      "loop seam"
+    ],
+    "steps": [
+      "Charger melomaniac ; contrôler tempo, métrique, queues et raccord par lecture répétée."
+    ],
+    "boundary": "Une longueur exacte en échantillons ne garantit pas un raccord musical."
+  },
+  {
+    "id": "design.image",
+    "kind": "procedure",
+    "description": "Générer ou modifier l'image raster demandée.",
+    "triggers": [
+      "générer image",
+      "modifier image",
+      "image generation"
+    ],
+    "steps": [
+      "Charger imagegen ; utiliser l'image source requise et le générateur prévu ; inspecter le résultat."
+    ],
+    "boundary": "Réutiliser SVG ou code natif lorsqu'ils constituent déjà la bonne source ; ne pas remplacer un logo sans demande."
+  },
+  {
+    "id": "design.figma",
+    "kind": "procedure",
+    "description": "Retrouver le bon workflow de création Figma.",
+    "triggers": [
+      "figma créer",
+      "design figma",
+      "écran figma"
+    ],
+    "steps": [
+      "Charger figma-generate-design et découvrir les outils Figma disponibles ; conserver le système de design existant."
+    ],
+    "boundary": "Une connexion absente est un blocage ; ne pas prétendre avoir modifié le fichier."
+  },
+  {
+    "id": "design.implement",
+    "kind": "procedure",
+    "description": "Implémenter une interface depuis une référence Figma.",
+    "triggers": [
+      "implémenter figma",
+      "figma code",
+      "design to code"
+    ],
+    "steps": [
+      "Charger figma-implement-design ; lire les composants concernés et vérifier le rendu responsive dans le projet."
+    ],
+    "boundary": "Réutiliser composants et tokens existants."
+  },
+  {
+    "id": "design.blender",
+    "kind": "procedure",
+    "description": "Modifier la scène Blender et vérifier son export.",
+    "triggers": [
+      "blender",
+      "bpy",
+      "glb",
+      "scène 3d"
+    ],
+    "steps": [
+      "Charger blender-local ; inspecter la scène, modifier les objets ciblés puis rouvrir l'export utile."
+    ],
+    "boundary": "Préserver scène source, textures, rigs et animations acceptés."
+  },
+  {
+    "id": "apps.drive",
+    "kind": "procedure",
+    "description": "Trouver le fichier connecté avant de le lire ou modifier.",
+    "triggers": [
+      "google drive",
+      "fichier drive",
+      "google docs"
+    ],
+    "steps": [
+      "Charger google-drive:google-drive ; rechercher le fichier puis utiliser son identifiant vérifié."
+    ],
+    "boundary": "La présence du document ne permet pas son partage ou son envoi."
+  },
+  {
+    "id": "apps.mail-read",
+    "kind": "procedure",
+    "description": "Rechercher puis lire les seuls messages pertinents.",
+    "triggers": [
+      "lire email",
+      "chercher mail",
+      "gmail search"
+    ],
+    "steps": [
+      "Découvrir les outils Gmail ; chercher avec une requête ciblée puis lire les fils utiles seulement."
+    ],
+    "boundary": "Ne pas envoyer de message ni afficher de pièces jointes inutiles."
+  },
+  {
+    "id": "apps.mail-draft",
+    "kind": "procedure",
+    "description": "Rédiger le message demandé avec ses destinataires vérifiés.",
+    "triggers": [
+      "rédiger email",
+      "brouillon mail",
+      "draft email"
+    ],
+    "steps": [
+      "Lire le fil utile ; rédiger le contenu dans la destination demandée ; vérifier identité et destinataires."
+    ],
+    "boundary": "Un brouillon n'autorise pas l'envoi ; contacter autrui exige une instruction explicite."
+  },
+  {
+    "id": "apps.calendar",
+    "kind": "procedure",
+    "description": "Vérifier disponibilités et horaires avant planification.",
+    "triggers": [
+      "agenda",
+      "calendrier",
+      "calendar",
+      "rendez vous"
+    ],
+    "steps": [
+      "Découvrir Google Calendar ; lire la plage pertinente, vérifier fuseau Europe/Paris et disponibilités avant l'événement demandé."
+    ],
+    "boundary": "Ne pas inviter de participants ou modifier un autre événement sans autorisation."
+  },
+  {
+    "id": "apps.issues",
+    "kind": "procedure",
+    "description": "Lire la story ou l'issue et conserver ses critères.",
+    "triggers": [
+      "shortcut",
+      "story",
+      "issue github",
+      "ticket"
+    ],
+    "steps": [
+      "Découvrir le connecteur concerné ; lire l'identifiant exact, les critères et Git Helpers ; relier la branche et la PR."
+    ],
+    "boundary": "Laisser Shortcut en in QA ou Review ; seul Antony/LPO décide Done hors demande explicite."
+  },
+  {
+    "id": "codex.config",
+    "kind": "procedure",
+    "description": "Ajuster un réglage Codex documenté sans exposer les secrets.",
+    "triggers": [
+      "réglages codex",
+      "config codex",
+      "éco token"
+    ],
+    "steps": [
+      "Charger openai-docs ; lire les seules clés pertinentes, vérifier leur support puis appliquer la modification minimale."
+    ],
+    "boundary": "Ne pas changer de modèle, fournisseur ou droits au-delà de la demande."
+  },
+  {
+    "id": "codex.skills",
+    "kind": "procedure",
+    "description": "Créer ou corriger une compétence réutilisable ciblée.",
+    "triggers": [
+      "créer skill",
+      "modifier skill",
+      "nouvelle compétence"
+    ],
+    "steps": [
+      "Charger skill-creator ; réutiliser la compétence pertinente et garder l'entrée courte ; lancer quick_validate.py."
+    ],
+    "boundary": "Ne pas ajouter au contexte toutes les procédures détaillées."
+  },
+  {
+    "id": "codex.plugins",
+    "kind": "procedure",
+    "description": "Inspecter la connexion et les capacités d'un plugin.",
+    "triggers": [
+      "plugin",
+      "connecteur",
+      "connexion application"
+    ],
+    "steps": [
+      "Charger plugin-management:plugin-management ; inspecter outils, connexion et permissions avant de choisir l'intégration."
+    ],
+    "boundary": "Ne pas installer, déconnecter ou supprimer un plugin sans demande correspondante."
+  },
+  {
+    "id": "codex.usage",
+    "kind": "procedure",
+    "description": "Lire les limites actuelles du compte connecté.",
+    "triggers": [
+      "quota codex",
+      "limites codex",
+      "usage tokens",
+      "consommation codex"
+    ],
+    "steps": [
+      "Appeler get_usage_limits ; lire usedPercent et resetsAt dans le fuseau du client."
+    ],
+    "boundary": "Une valeur absente est inconnue ; les limites sont partagées entre chats."
+  },
+  {
+    "id": "codex.automation",
+    "kind": "procedure",
+    "description": "Créer ou ajuster une automatisation demandée.",
+    "triggers": [
+      "automatisation",
+      "rappel",
+      "surveille",
+      "monitor",
+      "reminder"
+    ],
+    "steps": [
+      "Utiliser automation_update ; retrouver l'automatisation correspondante avant d'en créer une ; conserver l'intention de notification."
+    ],
+    "boundary": "Pas d'automatisation sans demande ; rester silencieux si l'état surveillé n'a pas changé."
+  },
+  {
+    "id": "routines.register",
+    "kind": "command",
+    "description": "Enregistrer une routine composée privée, sans shell ni récursion.",
+    "triggers": [
+      "enregistrer routine",
+      "routine composée",
+      "agent recette"
+    ],
+    "command": "rtk proxy atelier-routines run routines.register --params OBJET_JSON",
+    "boundary": "Registre privé borné ; inspections autorisées seulement, arrêt explicite sur échec, preuves conservées."
+  },
+  {
+    "id": "routines.list",
+    "kind": "command",
+    "description": "Lister les routines confiées aux agents et leur dernier état.",
+    "triggers": [
+      "routines enregistrées",
+      "liste recettes",
+      "mes routines"
+    ],
+    "command": "rtk proxy atelier-routines run routines.list --params OBJET_JSON",
+    "boundary": "Registre privé borné ; inspections autorisées seulement, arrêt explicite sur échec, preuves conservées."
+  },
+  {
+    "id": "routines.manage",
+    "kind": "command",
+    "description": "Inspecter, activer ou désactiver une routine sans supprimer son historique.",
+    "triggers": [
+      "gérer routine",
+      "désactiver routine",
+      "état recette"
+    ],
+    "command": "rtk proxy atelier-routines run routines.manage --params OBJET_JSON",
+    "boundary": "Registre privé borné ; inspections autorisées seulement, arrêt explicite sur échec, preuves conservées."
+  },
+  {
+    "id": "executions.inspect",
+    "kind": "command",
+    "description": "Retrouver une exécution et lire un détail ciblé sans la relancer.",
+    "triggers": [
+      "suivi exécution",
+      "preuve exécution",
+      "détail routine"
+    ],
+    "command": "rtk proxy atelier-routines run executions.inspect --params OBJET_JSON",
+    "boundary": "Suivi et preuves privés, paramètres stricts ; aucune relance implicite, preuve manquante jamais verte."
+  },
+  {
+    "id": "executions.wait",
+    "kind": "command",
+    "description": "Attendre un cycle autorisé sans nouveau lancement ni sondage du modèle.",
+    "triggers": [
+      "attendre exécution",
+      "attendre cycle"
+    ],
+    "command": "rtk proxy atelier-routines run executions.wait --params OBJET_JSON",
+    "boundary": "Suivi et preuves privés, paramètres stricts ; aucune relance implicite, preuve manquante jamais verte."
+  },
+  {
+    "id": "executions.resume",
+    "kind": "command",
+    "description": "Reprendre uniquement la collecte d’un calcul VPS identifié et préservé.",
+    "triggers": [
+      "reprendre collecte",
+      "reprise calcul"
+    ],
+    "command": "rtk proxy atelier-routines run executions.resume --params OBJET_JSON",
+    "boundary": "Suivi et preuves privés, paramètres stricts ; aucune relance implicite, preuve manquante jamais verte."
+  },
+  {
+    "id": "reports.validate",
+    "kind": "command",
+    "description": "Vérifier les assertions explicites d’un rapport JSON sans lancer de tests.",
+    "triggers": [
+      "assertions rapport",
+      "valider rapport"
+    ],
+    "command": "rtk proxy atelier-routines run reports.validate --params OBJET_JSON",
+    "boundary": "Suivi et preuves privés, paramètres stricts ; aucune relance implicite, preuve manquante jamais verte."
+  },
+  {
+    "id": "reports.compare",
+    "kind": "command",
+    "description": "Comparer des erreurs exactes à une référence explicite compatible.",
+    "triggers": [
+      "comparer erreurs",
+      "erreurs nouvelles persistantes résolues"
+    ],
+    "command": "rtk proxy atelier-routines run reports.compare --params OBJET_JSON",
+    "boundary": "Suivi et preuves privés, paramètres stricts ; aucune relance implicite, preuve manquante jamais verte."
+  },
+  {
+    "id": "executions.resolve",
+    "kind": "command",
+    "description": "Clore explicitement une inspection locale incertaine, sans relance ni validation.",
+    "triggers": [
+      "clore inspection incertaine",
+      "abandonner suivi local"
+    ],
+    "command": "rtk proxy atelier-routines run executions.resolve --params OBJET_JSON",
+    "boundary": "Serveur propriétaire arrêté, motif explicite, jamais pour un calcul VPS ; historique conservé."
+  }
+]
