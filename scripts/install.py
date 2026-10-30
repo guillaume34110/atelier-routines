@@ -41,12 +41,16 @@ def install_hooks(directory, python, rtk):
     entry = configured.get('mcp_servers', {}).get('atelier-routines', {})
     roots = entry.get('env', {}).get('ATELIER_ROUTINES_ROOTS', json.dumps([str(Path(__file__).resolve().parents[2])]))
     routing = hook_command(hook_dir, 'routing_hook.py', python, rtk, [roots])
+    waiting = hook_command(hook_dir, 'wait_hook.py', python, rtk)
     hooks = data.setdefault('hooks', {})
-    for event, matcher, handler in [('SessionStart', '^(startup|resume|clear|compact|fork)$', command),
-                                    ('PostToolUse', '^mcp__atelier[-_]routines__routines_run$', command),
-                                    ('UserPromptSubmit', '', routing), ('SubagentStart', '', routing),
-                                    ('PreToolUse', '^(Bash|exec_command)$', routing)]:
-        message = f'Atelier routines: {event}'
+    waits = r'^(write_stdin|wait|functions\.(write_stdin|wait)|mcp__atelier[-_]vps__vps_wait|mcp__atelier[-_]routines__routines_run)$'
+    for event, matcher, handler, label in [('SessionStart', '^(startup|resume|clear|compact|fork)$', command, ''),
+                                    ('PostToolUse', '^mcp__atelier[-_]routines__routines_run$', command, ''),
+                                    ('UserPromptSubmit', '', routing, ''), ('SubagentStart', '', routing, ''),
+                                    ('PreToolUse', '^(Bash|exec_command)$', routing, ''),
+                                    ('PreToolUse', waits, waiting, ' attente longue'),
+                                    ('PostToolUse', '^(Bash|exec_command|write_stdin|functions\\.(exec_command|write_stdin)|mcp__atelier[-_]routines__routines_run|mcp__atelier[-_]vps__vps_(run|wait))$', waiting, ' attente longue')]:
+        message = f'Atelier routines: {event}{label}'
         groups = hooks.setdefault(event, [])
         owned = [group for group in groups if len(group.get('hooks', [])) == 1
                  and group['hooks'][0].get('statusMessage') == message

@@ -16,6 +16,17 @@ outside routine coverage remain direct; never substitute a statistical diff for 
 The user hooks remind each prompt and subagent, and redirect supported simple shell inspections
 before execution. They do not execute routines themselves or inspect conversations.
 
+When an authorised computation remains active, delegate waiting to its existing backend:
+`executions.wait(seconds=3600)` for a routine execution; `vps_wait(timeout=3600)` for a known VPS job;
+`write_stdin(chars="", yield_time_ms=300000)` for an existing local session. If code mode yields a
+cell, call `wait` on that same cell with `yield_time_ms=900000`. The wait hooks enforce these
+parameters before execution; they never submit work, send input, cancel a job, or grant permission.
+Do not read logs, report counters, end a turn just to restart monitoring, or reason about progress
+between waits. Completion or failure returns control early. After a bounded wait expires, preserve
+the reference and report the unresolved state; do not resubmit. A user status request permits one
+focused check. If no backend can wait, use a bounded passive sleep of 15 minutes before checking,
+unless a real error or required user action needs attention. Never infer success from silence.
+
 `routines_find` reports each routine as `executable`, `guided` or `unavailable`, and gives its
 parameter schema. The implemented inspections and private recipe/execution managers report their real prerequisites. Long verification is limited to the fixed, authorised Atelier VPS adapter.
 For `guided`, apply the returned procedure only within the user's request and existing
