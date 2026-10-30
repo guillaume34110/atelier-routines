@@ -33,6 +33,13 @@ class RoutinesTest(unittest.TestCase):
                 if e.get('command'):
                     self.assertTrue(e['command'].startswith('rtk '))
 
+    def test_cli_version_uses_the_shared_release(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as stopped:
+            routines.main(['--version'])
+        self.assertEqual(stopped.exception.code, 0)
+        self.assertEqual(output.getvalue().strip(), 'atelier-routines ' + routines.VERSION)
+
     def test_every_routine_is_reachable_without_execution(self):
         with patch.object(routines.subprocess, 'run', side_effect=AssertionError('Unexpected execution')):
             for e in self.active:

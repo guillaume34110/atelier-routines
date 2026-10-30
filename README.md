@@ -1,5 +1,7 @@
 # Atelier routines
 
+Version **1.1.0** : `rtk proxy atelier-routines --version`. La CLI, l’initialisation MCP et les métadonnées installées partagent la même version.
+
 Serveur MCP local en Python pour les étapes mécaniques : inspections, recettes déclaratives, suivi durable et collecte vérifiée. Deux outils seulement, `routines_find` et `routines_run` ; les descriptions du catalogue ne sont pas chargées dans leurs définitions.
 
 Le catalogue contient 109 procédures et trois propositions exclues. 38 opérations sont implémentées ; les autres restent `guided`, avec leurs prérequis. Une opération peut être `unavailable` si son client, son format ou son environnement manque.

@@ -11,6 +11,8 @@ import sys
 import tempfile
 import tomllib
 
+import routines
+
 
 def hook_command(hook_dir, source, python, rtk, arguments=()):
     content = Path(__file__).with_name(source).read_bytes()
@@ -99,7 +101,8 @@ def install_skill(source, directory):
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
-    metadata.write_text(json.dumps({'source': str(source), 'skill_sha256': hashlib.sha256(content).hexdigest()}))
+    metadata.write_text(json.dumps({'source': str(source), 'skill_sha256': hashlib.sha256(content).hexdigest(),
+                                    'version': routines.VERSION}))
     metadata.chmod(0o600)
 
 
@@ -177,4 +180,4 @@ if __name__ == '__main__':
               Path(__file__).resolve().parents[2], rtk, replace=args.replace)
     install_skill(Path(__file__).resolve().parents[1] / 'SKILL.md', Path.home() / '.codex/skills/atelier-routines')
     install_hooks(Path.home() / '.codex', sys.executable, rtk)
-    print('atelier-routines configuré en stdio ; skill et hooks installés, autres réglages conservés. Examiner les nouveaux hooks avec /hooks dans Codex.')
+    print(f'atelier-routines {routines.VERSION} configuré en stdio ; skill et hooks installés, autres réglages conservés. Examiner les nouveaux hooks avec /hooks dans Codex.')

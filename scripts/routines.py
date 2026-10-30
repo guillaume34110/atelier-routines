@@ -12,6 +12,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
+VERSION = '1.1.0'
 CATALOGUE = Path(__file__).resolve().parents[1] / 'references/catalogue.json'
 BIN = Path.home() / '.local/bin'
 
@@ -152,6 +153,7 @@ def main(argv=None):
         split = argv.index('--')
         argv, tail = argv[:split], argv[split + 1:]
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--version', action='version', version='atelier-routines ' + VERSION)
     parser.add_argument('action', choices=['match', 'list', 'show', 'context', 'tree', 'outline', 'preflight', 'storage', 'budget', 'snapshot', 'self-test', 'find', 'run'])
     parser.add_argument('query', nargs='?', default='')
     parser.add_argument('--project', default='.')
