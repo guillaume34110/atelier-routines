@@ -1,13 +1,20 @@
 ---
 name: atelier-routines
-description: Select and reuse bounded operational routines for recurring project, Git, QA, files, audio and connected-app tasks.
+description: Use first for every covered project, Git, QA or file operation, including one-off work and subagents; reuse bounded routines before equivalent native commands.
 ---
 
 # Atelier routines
 
-For recurring operational work, use the known ID directly with MCP `routines_run(id, params)`.
+For every covered operational step, even in one-off work or a subagent, use the known ID directly with MCP `routines_run(id, params)` before an equivalent native command.
 If the ID is unknown, call `routines_find(query, limit=3)` once, then run the selected ID.
 Do not also run a CLI search. A simple question does not authorize executing a routine.
+
+Known IDs need no lookup: `git.status`, `git.diff`, `git.staged`, `git.log`, `git.branches`,
+`project.manifest`, `project.tree`, `project.search`, `files.logs`, `files.json`, `files.csv`.
+Use receipts for expanded results. Exact source/patch reads needed for editing and operations
+outside routine coverage remain direct; never substitute a statistical diff for a code review.
+The user hooks remind each prompt and subagent, and redirect supported simple shell inspections
+before execution. They do not execute routines themselves or inspect conversations.
 
 `routines_find` reports each routine as `executable`, `guided` or `unavailable`, and gives its
 parameter schema. The implemented inspections and private recipe/execution managers report their real prerequisites. Long verification is limited to the fixed, authorised Atelier VPS adapter.

@@ -1,4 +1,5 @@
 import json
+import shlex
 import os
 from pathlib import Path
 import subprocess
@@ -37,6 +38,7 @@ class HookTest(unittest.TestCase):
             original = {'description': 'preserve', 'hooks': {'Stop': [{'hooks': [{'type': 'command', 'command': 'existing'}]}]}}
             config = directory / 'hooks.json'
             config.write_text(json.dumps(original))
+            (directory / 'config.toml').write_text('[mcp_servers.atelier-routines.env]\nATELIER_ROUTINES_ROOTS = \'["/allowed with spaces"]\'\n')
             trust = directory / '.hook-trust'
             trust.write_text('unchanged')
             install.install_hooks(directory, sys.executable, '/rtk')
@@ -47,8 +49,12 @@ class HookTest(unittest.TestCase):
             self.assertEqual(len(installed['hooks']['SessionStart']), 1)
             self.assertEqual(len(installed['hooks']['PostToolUse']), 1)
             scripts = list((directory / 'hooks').glob('atelier-routines-*.py'))
-            self.assertEqual(len(scripts), 1)
-            self.assertEqual(scripts[0].read_bytes(), Path(__file__).with_name('codex_hook.py').read_bytes())
+            self.assertEqual(len(scripts), 2)
+            self.assertEqual({p.read_bytes() for p in scripts}, {
+                Path(__file__).with_name(name).read_bytes() for name in ('codex_hook.py', 'routing_hook.py')})
+            for event in ('UserPromptSubmit', 'SubagentStart', 'PreToolUse'):
+                self.assertEqual(len(installed['hooks'][event]), 1)
+                self.assertEqual(json.loads(shlex.split(installed['hooks'][event][0]['hooks'][0]['command'])[-1]), ['/allowed with spaces'])
             install.install_hooks(directory, sys.executable, '/rtk')
             self.assertEqual(config.read_bytes(), first)
             self.assertEqual(trust.read_text(), 'unchanged')
