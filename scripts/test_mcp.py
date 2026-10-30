@@ -64,6 +64,7 @@ async def connection(project, **overrides):
             async with ClientSession(read, write, read_timeout_seconds=timedelta(seconds=45)) as session:
                 initialized = await session.initialize()
                 assert initialized.serverInfo.name == 'atelier-routines'
+                assert initialized.serverInfo.version == executor.routines.VERSION
                 yield session
 
 

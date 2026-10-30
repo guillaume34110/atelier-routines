@@ -47,14 +47,23 @@ class HookTest(unittest.TestCase):
             self.assertEqual(installed['hooks']['Stop'], original['hooks']['Stop'])
             self.assertEqual(installed['description'], 'preserve')
             self.assertEqual(len(installed['hooks']['SessionStart']), 1)
-            self.assertEqual(len(installed['hooks']['PostToolUse']), 1)
+            self.assertEqual(len(installed['hooks']['PostToolUse']), 2)
             scripts = list((directory / 'hooks').glob('atelier-routines-*.py'))
-            self.assertEqual(len(scripts), 2)
+            self.assertEqual(len(scripts), 3)
             self.assertEqual({p.read_bytes() for p in scripts}, {
-                Path(__file__).with_name(name).read_bytes() for name in ('codex_hook.py', 'routing_hook.py')})
+                Path(__file__).with_name(name).read_bytes() for name in ('codex_hook.py', 'routing_hook.py', 'wait_hook.py')})
             for event in ('UserPromptSubmit', 'SubagentStart', 'PreToolUse'):
-                self.assertEqual(len(installed['hooks'][event]), 1)
+                self.assertEqual(len(installed['hooks'][event]), 2 if event == 'PreToolUse' else 1)
                 self.assertEqual(json.loads(shlex.split(installed['hooks'][event][0]['hooks'][0]['command'])[-1]), ['/allowed with spaces'])
+            prior = {event: [g for g in groups if not g['hooks'][0]['statusMessage'].endswith(' attente longue')]
+                     for event, groups in installed['hooks'].items() if event != 'Stop'}
+            installed['hooks'].update(prior)
+            config.write_text(json.dumps(installed))
+            install.install_hooks(directory, sys.executable, '/rtk')
+            for event, groups in prior.items():
+                self.assertEqual([g for g in json.loads(config.read_text())['hooks'][event]
+                                  if not g['hooks'][0]['statusMessage'].endswith(' attente longue')], groups)
+            first = config.read_bytes()
             install.install_hooks(directory, sys.executable, '/rtk')
             self.assertEqual(config.read_bytes(), first)
             self.assertEqual(trust.read_text(), 'unchanged')

@@ -24,7 +24,7 @@ class RoutinesTest(unittest.TestCase):
         return code, output.getvalue()
 
     def test_catalogue(self):
-        self.assertEqual(len(self.active), 109)
+        self.assertEqual(len(self.active), 110)
         self.assertEqual(len({e['id'] for e in self.entries}), len(self.entries))
         for e in self.active:
             with self.subTest(routine=e['id']):
@@ -32,6 +32,13 @@ class RoutinesTest(unittest.TestCase):
                 self.assertTrue(any(e.get(k) for k in ('command', 'steps', 'source', 'template')))
                 if e.get('command'):
                     self.assertTrue(e['command'].startswith('rtk '))
+
+    def test_cli_version_uses_the_shared_release(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), self.assertRaises(SystemExit) as stopped:
+            routines.main(['--version'])
+        self.assertEqual(stopped.exception.code, 0)
+        self.assertEqual(output.getvalue().strip(), 'atelier-routines ' + routines.VERSION)
 
     def test_every_routine_is_reachable_without_execution(self):
         with patch.object(routines.subprocess, 'run', side_effect=AssertionError('Unexpected execution')):
@@ -103,7 +110,7 @@ class RoutinesTest(unittest.TestCase):
             self.assertTrue(all(e['kind'] != 'proposal' for e in selected))
             code, output = self.call('list')
             self.assertEqual(code, 0)
-            self.assertIn('109 routines', output)
+            self.assertIn('110 routines', output)
             self.assertLessEqual(len(output), 1950)
 
     def test_existing_guard_contracts(self):

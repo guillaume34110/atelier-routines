@@ -11,6 +11,8 @@ import sys
 import tempfile
 import tomllib
 
+import routines
+
 
 def hook_command(hook_dir, source, python, rtk, arguments=()):
     content = Path(__file__).with_name(source).read_bytes()
@@ -41,12 +43,16 @@ def install_hooks(directory, python, rtk):
     entry = configured.get('mcp_servers', {}).get('atelier-routines', {})
     roots = entry.get('env', {}).get('ATELIER_ROUTINES_ROOTS', json.dumps([str(Path(__file__).resolve().parents[2])]))
     routing = hook_command(hook_dir, 'routing_hook.py', python, rtk, [roots])
+    waiting = hook_command(hook_dir, 'wait_hook.py', python, rtk, [roots])
     hooks = data.setdefault('hooks', {})
-    for event, matcher, handler in [('SessionStart', '^(startup|resume|clear|compact|fork)$', command),
-                                    ('PostToolUse', '^mcp__atelier[-_]routines__routines_run$', command),
-                                    ('UserPromptSubmit', '', routing), ('SubagentStart', '', routing),
-                                    ('PreToolUse', '^(Bash|exec_command)$', routing)]:
-        message = f'Atelier routines: {event}'
+    waits = r'^(Bash|exec_command|wait|functions\.wait|mcp__atelier[-_]vps__vps_wait|mcp__atelier[-_]routines__routines_run)$'
+    for event, matcher, handler, label in [('SessionStart', '^(startup|resume|clear|compact|fork)$', command, ''),
+                                    ('PostToolUse', '^mcp__atelier[-_]routines__routines_run$', command, ''),
+                                    ('UserPromptSubmit', '', routing, ''), ('SubagentStart', '', routing, ''),
+                                    ('PreToolUse', '^(Bash|exec_command)$', routing, ''),
+                                    ('PreToolUse', waits, waiting, ' attente longue'),
+                                    ('PostToolUse', '^(Bash|exec_command|write_stdin|functions\\.(exec_command|write_stdin)|mcp__atelier[-_]routines__routines_run|mcp__atelier[-_]vps__vps_(run|wait))$', waiting, ' attente longue')]:
+        message = f'Atelier routines: {event}{label}'
         groups = hooks.setdefault(event, [])
         owned = [group for group in groups if len(group.get('hooks', [])) == 1
                  and group['hooks'][0].get('statusMessage') == message
@@ -54,7 +60,8 @@ def install_hooks(directory, python, rtk):
         for group in owned:
             groups.remove(group)
         groups.append({'matcher': matcher, 'hooks': [{'type': 'command', 'command': handler,
-                       'timeout': 5, 'additionalContextLimit': 220, 'statusMessage': message}]})
+                       'timeout': 960 if event == 'PreToolUse' and label else 5,
+                       'additionalContextLimit': 220, 'statusMessage': message}]})
     updated = (json.dumps(data, ensure_ascii=False, indent=2) + '\n').encode()
     if updated == original:
         return
@@ -95,7 +102,8 @@ def install_skill(source, directory):
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
-    metadata.write_text(json.dumps({'source': str(source), 'skill_sha256': hashlib.sha256(content).hexdigest()}))
+    metadata.write_text(json.dumps({'source': str(source), 'skill_sha256': hashlib.sha256(content).hexdigest(),
+                                    'version': routines.VERSION}))
     metadata.chmod(0o600)
 
 
@@ -173,4 +181,4 @@ if __name__ == '__main__':
               Path(__file__).resolve().parents[2], rtk, replace=args.replace)
     install_skill(Path(__file__).resolve().parents[1] / 'SKILL.md', Path.home() / '.codex/skills/atelier-routines')
     install_hooks(Path.home() / '.codex', sys.executable, rtk)
-    print('atelier-routines configuré en stdio ; skill et hooks installés, autres réglages conservés. Examiner les nouveaux hooks avec /hooks dans Codex.')
+    print(f'atelier-routines {routines.VERSION} configuré en stdio ; skill et hooks installés, autres réglages conservés. Examiner les nouveaux hooks avec /hooks dans Codex.')

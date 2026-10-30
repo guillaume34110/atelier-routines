@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -62,6 +63,7 @@ class InstallTest(unittest.TestCase):
             target.symlink_to(source)
             install.install_skill(source, directory)
             self.assertFalse(target.is_symlink())
+            self.assertEqual(json.loads((directory / '.installation.json').read_text())['version'], install.routines.VERSION)
             self.assertEqual(target.read_text(), source.read_text())
             source.write_text('updated instructions\n')
             install.install_skill(source, directory)

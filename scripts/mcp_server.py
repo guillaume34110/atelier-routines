@@ -12,7 +12,7 @@ from mcp.types import CallToolResult, TextContent, Tool, ToolAnnotations
 import executor
 import executions
 
-server = Server('atelier-routines')
+server = Server('atelier-routines', version=executor.routines.VERSION)
 
 
 @server.list_tools()
