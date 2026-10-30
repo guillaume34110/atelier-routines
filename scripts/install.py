@@ -12,16 +12,8 @@ import tempfile
 import tomllib
 
 
-def install_hooks(directory, python, rtk):
-    config = directory / 'hooks.json'
-    hook_dir = directory / 'hooks'
-    if config.is_symlink() or hook_dir.is_symlink():
-        raise ValueError('Configuration de hooks symbolique : source préservée.')
-    original = config.read_bytes() if config.exists() else b''
-    if len(original) > 1024 * 1024:
-        raise ValueError('Configuration de hooks trop volumineuse.')
-    data = json.loads(original) if original else {}
-    content = Path(__file__).with_name('codex_hook.py').read_bytes()
+def hook_command(hook_dir, source, python, rtk, arguments=()):
+    content = Path(__file__).with_name(source).read_bytes()
     digest = hashlib.sha256(content).hexdigest()
     hook_dir.mkdir(parents=True, exist_ok=True)
     target = hook_dir / f'atelier-routines-{digest}.py'
@@ -31,10 +23,29 @@ def install_hooks(directory, python, rtk):
         with target.open('xb') as out:
             out.write(content)
         target.chmod(0o600)
-    command = shlex.join([str(rtk), 'proxy', str(python), str(target)])
+    return shlex.join([str(rtk), 'proxy', str(python), str(target), *arguments])
+
+
+def install_hooks(directory, python, rtk):
+    config = directory / 'hooks.json'
+    hook_dir = directory / 'hooks'
+    if config.is_symlink() or hook_dir.is_symlink():
+        raise ValueError('Configuration de hooks symbolique : source préservée.')
+    original = config.read_bytes() if config.exists() else b''
+    if len(original) > 1024 * 1024:
+        raise ValueError('Configuration de hooks trop volumineuse.')
+    data = json.loads(original) if original else {}
+    command = hook_command(hook_dir, 'codex_hook.py', python, rtk)
+    personal = directory / 'config.toml'
+    configured = tomllib.loads(personal.read_text()) if personal.exists() else {}
+    entry = configured.get('mcp_servers', {}).get('atelier-routines', {})
+    roots = entry.get('env', {}).get('ATELIER_ROUTINES_ROOTS', json.dumps([str(Path(__file__).resolve().parents[2])]))
+    routing = hook_command(hook_dir, 'routing_hook.py', python, rtk, [roots])
     hooks = data.setdefault('hooks', {})
-    for event, matcher in [('SessionStart', '^(startup|resume|clear|compact|fork)$'),
-                           ('PostToolUse', '^mcp__atelier[-_]routines__routines_run$')]:
+    for event, matcher, handler in [('SessionStart', '^(startup|resume|clear|compact|fork)$', command),
+                                    ('PostToolUse', '^mcp__atelier[-_]routines__routines_run$', command),
+                                    ('UserPromptSubmit', '', routing), ('SubagentStart', '', routing),
+                                    ('PreToolUse', '^(Bash|exec_command)$', routing)]:
         message = f'Atelier routines: {event}'
         groups = hooks.setdefault(event, [])
         owned = [group for group in groups if len(group.get('hooks', [])) == 1
@@ -42,7 +53,7 @@ def install_hooks(directory, python, rtk):
                  and 'atelier-routines-' in group['hooks'][0].get('command', '')]
         for group in owned:
             groups.remove(group)
-        groups.append({'matcher': matcher, 'hooks': [{'type': 'command', 'command': command,
+        groups.append({'matcher': matcher, 'hooks': [{'type': 'command', 'command': handler,
                        'timeout': 5, 'additionalContextLimit': 220, 'statusMessage': message}]})
     updated = (json.dumps(data, ensure_ascii=False, indent=2) + '\n').encode()
     if updated == original:
