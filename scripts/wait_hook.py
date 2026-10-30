@@ -9,7 +9,7 @@ VPS_SECONDS = 3600
 
 
 def number(value, maximum):
-    return type(value) in (int, float) and 0 <= value <= maximum
+    return type(value) is int and 0 <= value <= maximum
 
 
 def response(data):

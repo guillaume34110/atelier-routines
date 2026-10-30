@@ -43,6 +43,7 @@ class WaitHookTest(unittest.TestCase):
                              ('mcp__other__vps_wait', {'job_id': 'x'}), ('wait', {'cell_id': ''}),
                              ('write_stdin', {'session_id': -1}), ('write_stdin', {'session_id': True}),
                              ('write_stdin', {'session_id': 1, 'yield_time_ms': 'invalid'}),
+                             ('write_stdin', {'session_id': 1, 'yield_time_ms': 0.5}),
                              ('write_stdin', {'session_id': 1, 'yield_time_ms': -1})]:
             self.assertIsNone(self.pre(name, values))
 
