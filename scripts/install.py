@@ -43,9 +43,9 @@ def install_hooks(directory, python, rtk):
     entry = configured.get('mcp_servers', {}).get('atelier-routines', {})
     roots = entry.get('env', {}).get('ATELIER_ROUTINES_ROOTS', json.dumps([str(Path(__file__).resolve().parents[2])]))
     routing = hook_command(hook_dir, 'routing_hook.py', python, rtk, [roots])
-    waiting = hook_command(hook_dir, 'wait_hook.py', python, rtk)
+    waiting = hook_command(hook_dir, 'wait_hook.py', python, rtk, [roots])
     hooks = data.setdefault('hooks', {})
-    waits = r'^(write_stdin|wait|functions\.(write_stdin|wait)|mcp__atelier[-_]vps__vps_wait|mcp__atelier[-_]routines__routines_run)$'
+    waits = r'^(Bash|exec_command|wait|functions\.wait|mcp__atelier[-_]vps__vps_wait|mcp__atelier[-_]routines__routines_run)$'
     for event, matcher, handler, label in [('SessionStart', '^(startup|resume|clear|compact|fork)$', command, ''),
                                     ('PostToolUse', '^mcp__atelier[-_]routines__routines_run$', command, ''),
                                     ('UserPromptSubmit', '', routing, ''), ('SubagentStart', '', routing, ''),
@@ -60,7 +60,8 @@ def install_hooks(directory, python, rtk):
         for group in owned:
             groups.remove(group)
         groups.append({'matcher': matcher, 'hooks': [{'type': 'command', 'command': handler,
-                       'timeout': 5, 'additionalContextLimit': 220, 'statusMessage': message}]})
+                       'timeout': 960 if event == 'PreToolUse' and label else 5,
+                       'additionalContextLimit': 220, 'statusMessage': message}]})
     updated = (json.dumps(data, ensure_ascii=False, indent=2) + '\n').encode()
     if updated == original:
         return

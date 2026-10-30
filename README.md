@@ -4,7 +4,7 @@ Version **1.1.0** : `rtk proxy atelier-routines --version`. La CLI, l’initiali
 
 Serveur MCP local en Python pour les étapes mécaniques : inspections, recettes déclaratives, suivi durable et collecte vérifiée. Deux outils seulement, `routines_find` et `routines_run` ; les descriptions du catalogue ne sont pas chargées dans leurs définitions.
 
-Le catalogue contient 109 procédures et trois propositions exclues. 38 opérations sont implémentées ; les autres restent `guided`, avec leurs prérequis. Une opération peut être `unavailable` si son client, son format ou son environnement manque.
+Le catalogue contient 110 procédures et trois propositions exclues. 39 opérations sont implémentées ; les autres restent `guided`, avec leurs prérequis. Une opération peut être `unavailable` si son client, son format ou son environnement manque.
 
 ## Utilisation
 
@@ -29,7 +29,7 @@ Le même identifiant retrouve le suivi. Un retour `historical=true, facts_curren
 | Fichiers et rapports | `files.json`, `files.csv`, `files.logs`, `files.archive`, `checks.coverage`, `checks.failure`, `audio.inspect`, `reports.validate`, `reports.compare` |
 | État local | `system.preflight`, `system.memory`, `system.storage`, `system.processes`, `web.ports`, `web.api-health` |
 | Recettes | `routines.register`, `routines.list`, `routines.manage` |
-| Suivi | `executions.inspect`, `executions.wait`, `executions.resume`, `executions.resolve` |
+| Suivi | `jobs.wait`, `executions.inspect`, `executions.wait`, `executions.resume`, `executions.resolve` |
 | Calcul autorisé | `checks.regression` : suite complète de ce projet via le client Atelier VPS installé |
 
 Les schémas exacts sont renvoyés par `routines_find`. Les recherches sont littérales. Les diffs Git sont statistiques. ZIP et PCM/WAV sont les formats autonomes d’archives et d’audio. La couverture est celle d’un rapport existant ; elle ne lance pas de tests. Un endpoint de santé accessible ne valide pas un scénario E2E.
@@ -80,7 +80,9 @@ Les hooks utilisateur rappellent la priorité MCP au démarrage, à chaque deman
 
 La priorité s’applique à chaque étape couverte, même dans un travail ponctuel. Les rappels ne lancent rien sur une question. Le routage ne lit ni transcript ni contenu de projet et reste limité aux racines autorisées du MCP ; il vérifie seulement les chemins et le marqueur de racine Git. Chaque script installé porte l’empreinte de son contenu ; les autres hooks restent présents. Les deux définitions existantes sont conservées à l’identique lors de l’ajout du routage. Examiner puis approuver les trois nouvelles définitions avec `/hooks` dans Codex : elles sont ignorées tant qu’elles ne sont pas approuvées, conformément au [contrat des hooks](https://learn.chatgpt.com/docs/hooks). L’installateur ne modifie jamais le registre de confiance.
 
-Deux hooks supplémentaires « attente longue » imposent les durées dans les arguments des outils, au lieu de compter uniquement sur un rappel : 5 minutes pour `write_stdin` sans entrée, 15 minutes pour une cellule de code mode, 1 heure pour `executions.wait` et `vps_wait`. Les backends gardent la même référence et peuvent rendre la main avant l’échéance. Les retours « calcul actif » demandent l’attente directe sans lectures de logs ni messages de compteurs. Les paramètres invalides, entrées interactives, annulations et autorisations existantes restent traités par leurs outils. Approuver les deux nouvelles définitions `PreToolUse attente longue` et `PostToolUse attente longue` via `/hooks` ; les cinq précédentes restent inchangées. Ce contrôle porte sur les outils d’attente couverts, pas sur le raisonnement interne de Codex ni tout programme arbitraire. Il ne crée ni modèle, ni watcher, ni démon, et ne relance jamais un calcul.
+`jobs.wait` surveille un processus local existant pendant 15 minutes par défaut (jusqu’à 1 h), sans retours de progression au modèle. Il exige un PID appartenant à l’utilisateur et travaillant dans le projet, ou détecte un unique garde `workspace-budget.py run` canonique. La référence `execution_id` permet de reprendre avec `executions.wait` ; le PID et son identité de démarrage restent liés. Un délai rend `running`, un PID remplacé `decision_required`, une disparition `partial` : récupérer le code de sortie de la session connue et vérifier les artefacts reste nécessaire. Aucun lancement ou arrêt de calcul, accès aux arguments dans le résultat, ni succès de test déduit du silence.
+
+Deux hooks supplémentaires « attente longue » prolongent les attentes MCP compatibles et surveillent avant les sondages shell de `output/task-tmp/stdout.log` lorsqu’un garde local unique est actif. Cette attente s’exécute dans le hook (900 s maximum, retour anticipé à la fin du processus), sans rendre la main au modèle à chaque progression. `write_stdin` est explicitement exempté de `PreToolUse` par Codex : son délai de 5 minutes reste un repli explicite, pas une interception garantie. Approuver les deux définitions `PreToolUse attente longue` et `PostToolUse attente longue` via `/hooks` ; les cinq précédentes restent inchangées. Le contrôle ne couvre ni le raisonnement interne de Codex ni tous les programmes arbitraires. Il n’ajoute ni modèle, ni démon et ne relance jamais un calcul.
 
 Les racines autorisées sont configurées dans `ATELIER_ROUTINES_ROOTS`, une liste JSON ; le défaut est le dossier parent de l’installation. Le registre privé est sous `~/.local/share/atelier-routines`, le suivi dans le dossier voisin `atelier-routines-executions`. La CLI et le MCP partagent le catalogue et le moteur :
 

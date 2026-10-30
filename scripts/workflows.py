@@ -12,7 +12,7 @@ import uuid
 import executor as core
 
 MANAGEMENT = {'routines.register', 'routines.list', 'routines.manage'}
-NON_COMPOSABLE = MANAGEMENT | {'checks.regression', 'executions.inspect', 'executions.wait', 'executions.resume', 'executions.resolve'}
+NON_COMPOSABLE = MANAGEMENT | {'checks.regression', 'executions.inspect', 'executions.wait', 'executions.resume', 'executions.resolve', 'jobs.wait'}
 MAX_STORE = 1024 * 1024
 MAX_RECIPE = 16 * 1024
 NAME = re.compile(r'[a-z0-9][a-z0-9-]{0,47}')

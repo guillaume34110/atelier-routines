@@ -18,9 +18,15 @@ before execution. They do not execute routines themselves or inspect conversatio
 
 When an authorised computation remains active, delegate waiting to its existing backend:
 `executions.wait(seconds=3600)` for a routine execution; `vps_wait(timeout=3600)` for a known VPS job;
-`write_stdin(chars="", yield_time_ms=300000)` for an existing local session. If code mode yields a
-cell, call `wait` on that same cell with `yield_time_ms=900000`. The wait hooks enforce these
-parameters before execution; they never submit work, send input, cancel a job, or grant permission.
+`jobs.wait(project, pid, seconds=900)` for an existing local process. Omit `pid` only when a unique
+canonical workspace guard is running for the project. Preserve the returned `execution_id`;
+`executions.wait` continues observing that same PID and start identity. Process exit is `partial`,
+never a passed test: collect the existing session's exit code and verify its required artifacts.
+The hook also waits before native polls of `output/task-tmp/stdout.log` while that guard is active.
+For an unsupported local session use `write_stdin(chars="", yield_time_ms=300000)` explicitly:
+Codex exempts that transport from PreToolUse, so a hook cannot rewrite it. If code mode yields a
+cell, wait on that same cell with `yield_time_ms=900000`. Supported MCP waits can be extended by
+the hook; no wait submits work, sends input, cancels a job, or grants permission.
 Do not read logs, report counters, end a turn just to restart monitoring, or reason about progress
 between waits. Completion or failure returns control early. After a bounded wait expires, preserve
 the reference and report the unresolved state; do not resubmit. A user status request permits one
@@ -64,7 +70,7 @@ The executable is a link to `scripts/routines.py` in this skill. If it is outsid
 
 `match` uses local French/English keywords, without a model or network. It returns one procedure and at most two alternative IDs; it never executes the operation. Select the appropriate result and carry out its command or steps within the user's authorization. If it misses, use a precise domain/ID or proceed directly; do not repeatedly query or read all catalogue entries. Simple conversation needs no lookup.
 
-`list` shows domain counts; `list DOMAINE` gives a short index. `show ID` returns one entry from [references/catalogue.json](references/catalogue.json). The catalogue has 109 procedures plus three explicitly excluded starter proposals. Procedures may reuse an installed script, guard, skill or connected tool; they are not 100 independent programs. Replace uppercase command placeholders with actual, safely quoted arguments; never evaluate a template as shell code. Missing prerequisites or unavailable tools remain blockers, not successful runs.
+`list` shows domain counts; `list DOMAINE` gives a short index. `show ID` returns one entry from [references/catalogue.json](references/catalogue.json). The catalogue has 110 procedures plus three explicitly excluded starter proposals. Procedures may reuse an installed script, guard, skill or connected tool; they are not 110 independent programs. Replace uppercase command placeholders with actual, safely quoted arguments; never evaluate a template as shell code. Missing prerequisites or unavailable tools remain blockers, not successful runs.
 
 Use the installed guards rather than rebuilding their shell commands:
 

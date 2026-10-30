@@ -58,7 +58,7 @@ def locked():
 def version():
     digest = hashlib.sha256(str(sys.version_info[:3]).encode())
     base = Path(__file__).resolve().parent
-    for name in ('routines.py', 'executor.py', 'workflows.py', 'executions.py', 'vps_cycle.py'):
+    for name in ('routines.py', 'executor.py', 'workflows.py', 'executions.py', 'vps_cycle.py', 'jobs.py', 'wait_hook.py'):
         path = base / name
         if path.exists():
             digest.update(path.read_bytes())
@@ -344,10 +344,14 @@ async def dispatch(identifier, params, allow_background=True, request_id=None):
         if request_id is not None and (type(request_id) is not str or not re.fullmatch(r'[A-Za-z0-9_-]{1,64}', request_id)):
             raise core.Refusal('Clé de demande invalide (1 à 64 lettres, chiffres, tirets ou underscores).')
         token = REQUEST_ID.set(request_id)
-        if identifier not in ('checks.regression', 'executions.wait', 'executions.resume', 'executions.resolve'):
+        if identifier not in ('checks.regression', 'executions.wait', 'executions.resume', 'executions.resolve', 'jobs.wait'):
             return await asyncio.to_thread(core.run, identifier, params)
         params = core.validate(identifier, params)
         project = core.project_path(params['project'])
+        if identifier == 'jobs.wait':
+            import jobs
+            params['project'] = str(project)
+            return await jobs.start(project, params)
         if identifier == 'executions.resolve':
             return core.compact(resolve(project, params))
         import vps_cycle
@@ -356,6 +360,9 @@ async def dispatch(identifier, params, allow_background=True, request_id=None):
                 raise core.Refusal('La CLI ne détache pas de processus ; wait=true ou MCP persistant requis.')
             return await vps_cycle.start(project, params)
         if identifier == 'executions.wait':
+            if get(params['execution_id'], project)['id'] == 'jobs.wait':
+                import jobs
+                return await jobs.wait(project, params['execution_id'], params['seconds'])
             return await vps_cycle.wait(project, params['execution_id'], params['seconds'])
         return await vps_cycle.resume(project, params['execution_id'])
     except (core.Refusal, OSError, ValueError, TypeError) as error:

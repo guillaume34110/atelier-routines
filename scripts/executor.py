@@ -100,6 +100,8 @@ SCHEMAS.update({
                               current={'type': 'string', 'minLength': 32, 'maxLength': 32}),
     'reports.validate': schema(file=FILE, assertions={'type': 'array', 'minItems': 1, 'maxItems': 16}),
     'checks.regression': schema(wait={'type': 'boolean', 'default': True}),
+    'jobs.wait': schema(pid={'type': 'integer', 'minimum': 0, 'maximum': 2147483647, 'default': 0},
+                        seconds={'type': 'integer', 'minimum': 1, 'maximum': 3600, 'default': 900}),
 })
 
 
@@ -134,6 +136,8 @@ def availability(entry):
         required.append('rg')
     if entry['id'] == 'system.processes':
         required.append('ps')
+    if entry['id'] == 'jobs.wait':
+        required.extend(('ps', 'pgrep'))
     missing = [name for name in required if not shutil.which(name)]
     if entry['id'] == 'web.ports' and not lsof_path():
         missing.append('lsof')

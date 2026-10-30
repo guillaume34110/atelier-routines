@@ -1565,6 +1565,14 @@
     "boundary": "Suivi et preuves privés, paramètres stricts ; aucune relance implicite, preuve manquante jamais verte."
   },
   {
+    "id": "jobs.wait",
+    "kind": "command",
+    "description": "Surveiller un calcul local identifié sans sondage du modèle, puis conserver sa référence.",
+    "triggers": ["attendre entraînement local", "surveiller calcul local", "attendre processus", "jobs.wait"],
+    "command": "rtk proxy atelier-routines run jobs.wait --params OBJET_JSON",
+    "boundary": "PID appartenant à l’utilisateur dans le projet, ou garde Atelier unique détecté ; attente bornée, aucun lancement ni arrêt. La disparition du processus ne valide pas ses résultats."
+  },
+  {
     "id": "executions.resolve",
     "kind": "command",
     "description": "Clore explicitement une inspection locale incertaine, sans relance ni validation.",

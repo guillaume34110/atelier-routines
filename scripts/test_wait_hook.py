@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import wait_hook
 
@@ -16,16 +17,30 @@ class WaitHookTest(unittest.TestCase):
     def test_waits_are_extended_without_changing_the_reference_or_sending_input(self):
         for name in ('write_stdin', 'functions.write_stdin'):
             args = {'session_id': 55991, 'chars': '', 'yield_time_ms': 50000, 'max_output_tokens': 150}
-            output = self.pre(name, args)
-            self.assertEqual(output['updatedInput'], {**args, 'yield_time_ms': 300000})
-            self.assertEqual(output['permissionDecision'], 'allow')
-            self.assertEqual(args['yield_time_ms'], 50000)
-            self.assertIsNone(self.pre(name, output['updatedInput']))
+            self.assertIsNone(self.pre(name, args))  # Codex exempts this transport from PreToolUse.
             for chars in ('\x03', 'answer\n'):
                 self.assertIsNone(self.pre(name, {**args, 'chars': chars}))
         args = {'cell_id': 'g4:1755', 'yield_time_ms': 20000, 'max_tokens': 150}
         self.assertEqual(self.pre('wait', args)['updatedInput'], {**args, 'yield_time_ms': 900000})
         self.assertIsNone(self.pre('wait', {**args, 'terminate': True}))
+
+    def test_native_log_poll_waits_in_the_hook_without_returning_to_the_model(self):
+        with tempfile.TemporaryDirectory(dir=os.environ['TASK_WORKSPACE']) as tmp:
+            project = Path(tmp)
+            data = {'hook_event_name': 'PreToolUse', 'tool_name': 'Bash', 'cwd': str(project),
+                    'tool_input': {'command': 'rtk proxy tail -n 1 output/task-tmp/stdout.log'}}
+            process = {'pid': 123, 'uid': os.getuid(), 'started': 'known', 'state': 'S'}
+            with patch.object(wait_hook, 'find_process', return_value=process), patch.object(wait_hook, 'wait_process') as wait:
+                wait.return_value = {'status': 'partial', 'tests_validated': False}
+                self.assertIn('restent à vérifier', wait_hook.response(data, [project])['additionalContext'])
+                wait.assert_called_once_with(process, 900)
+                wait.return_value = {'status': 'running', 'tests_validated': False}
+                self.assertEqual(wait_hook.response(data, [project])['permissionDecision'], 'deny')
+                wait.reset_mock()
+                self.assertIsNone(wait_hook.response(data, [project / 'outside']))
+                data['tool_input']['command'] = 'rtk proxy sed -n 1p scripts/source.py'
+                self.assertIsNone(wait_hook.response(data, [project]))
+                wait.assert_not_called()
 
     def test_only_existing_read_only_waits_are_rewritten(self):
         args = {'job_id': 'server:known-job', 'server': 'default', 'timeout': 60}
@@ -69,8 +84,8 @@ class WaitHookTest(unittest.TestCase):
     def test_real_hook_protocol_is_bounded_and_does_not_execute_payloads(self):
         with tempfile.TemporaryDirectory(dir=os.environ['TASK_WORKSPACE']) as tmp:
             marker = Path(tmp) / 'never-created'
-            payload = {'hook_event_name': 'PreToolUse', 'tool_name': 'write_stdin',
-                       'tool_input': {'session_id': 1, 'yield_time_ms': 50000, 'chars': ''}}
+            payload = {'hook_event_name': 'PreToolUse', 'tool_name': 'wait',
+                       'tool_input': {'cell_id': 'known-cell', 'yield_time_ms': 20000}}
             script = Path(__file__).with_name('wait_hook.py')
             def invoke(text):
                 out = subprocess.run(['rtk', 'proxy', sys.executable, str(script)], input=text,
@@ -78,8 +93,9 @@ class WaitHookTest(unittest.TestCase):
                 self.assertEqual(out.stderr, '')
                 self.assertLess(len(out.stdout.encode()), 1600)
                 return json.loads(out.stdout) if out.stdout else None
-            self.assertEqual(invoke(json.dumps(payload))['hookSpecificOutput']['updatedInput']['yield_time_ms'], 300000)
-            payload['tool_input']['chars'] = f'; touch {marker}'
+            self.assertEqual(invoke(json.dumps(payload))['hookSpecificOutput']['updatedInput']['yield_time_ms'], 900000)
+            payload['tool_name'] = 'exec_command'
+            payload['tool_input'] = {'cmd': f'; touch {marker}'}
             self.assertIsNone(invoke(json.dumps(payload)))
             self.assertFalse(marker.exists())
             for raw in ('not json', '[]', json.dumps({'padding': 'x' * 65536})):
