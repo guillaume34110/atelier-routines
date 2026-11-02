@@ -82,13 +82,14 @@ class ExecutionTest(unittest.TestCase):
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
         import threading
         entered = threading.Event()
+        release = threading.Event()
         calls = []
 
         class Slow(BaseHTTPRequestHandler):
             def do_GET(self):
                 calls.append(self.path)
                 entered.set()
-                time.sleep(1.8)
+                release.wait(20)
                 try:
                     self.send_response(200)
                     self.end_headers()
@@ -133,6 +134,7 @@ class ExecutionTest(unittest.TestCase):
                             'reason': 'Inspection interrompue constatée ; aucune validation acquise.'}})
                         self.assertEqual(resolved['status'], 'abandoned', resolved)
         finally:
+            release.set()
             server.shutdown()
             server.server_close()
             thread.join(timeout=5)

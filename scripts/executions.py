@@ -19,6 +19,10 @@ CACHEABLE = {'files.json', 'files.csv', 'files.logs', 'files.archive', 'project.
              'project.errors', 'checks.failure', 'checks.coverage', 'audio.inspect'}
 ACTIVE = {'starting', 'running', 'collecting'}
 REQUEST_ID = ContextVar('routine_request_id', default=None)
+MAX_HOT = 1024
+MAX_RECORDS = 16 * MAX_HOT
+MAX_BYTES = 16 * 1024 * 1024
+TERMINAL = {'ok', 'error', 'partial', 'timeout', 'unavailable', 'guided', 'abandoned'}
 
 
 def root():
@@ -40,19 +44,90 @@ def locked():
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 raise core.Refusal('Suivi occupé ; aucune relance automatique.') from None
-            total = count = 0
-            with os.scandir(directory) as files:
-                for item in files:
-                    info = item.stat(follow_symlinks=False)
-                    if not stat.S_ISREG(info.st_mode):
-                        raise core.Refusal('Entrée de suivi non régulière.')
-                    count += 1
-                    total += info.st_size
-                    if count > 1025 or total + workflows.MAX_RECIPE > 16 * 1024 * 1024:
-                        raise core.Refusal('Budget de suivi atteint (1 024 exécutions / 16 Mio).')
             yield directory
         finally:
             os.close(lock)
+
+
+@contextmanager
+def history(directory, create=False):
+    if create:
+        try:
+            os.mkdir('history', 0o700, dir_fd=directory)
+        except FileExistsError:
+            pass
+    try:
+        archive = os.open('history', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+    except FileNotFoundError:
+        yield None
+        return
+    try:
+        info = os.fstat(archive)
+        if info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise core.Refusal('Historique de suivi non privé ou étranger.')
+        yield archive
+    finally:
+        os.close(archive)
+
+def entries(directory, archive):
+    result = []
+    for current in (directory, archive):
+        if current is None:
+            continue
+        with os.scandir(current) as files:
+            for item in files:
+                if current == directory and item.name in ('.lock', 'history'):
+                    continue
+                info = item.stat(follow_symlinks=False)
+                if (not re.fullmatch(r'[0-9a-f]{32}\.json', item.name)
+                        or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                        or info.st_uid != os.getuid() or info.st_mode & 0o077
+                        or info.st_size > workflows.MAX_RECIPE):
+                    raise core.Refusal('Entrée de suivi non privée, non régulière ou trop volumineuse.')
+                result.append((current, item.name, info.st_size))
+                if len(result) > MAX_RECORDS:
+                    raise core.Refusal('Budget de suivi atteint (16 384 entrées, historique compris).')
+    if len({name for _, name, _ in result}) != len(result):
+        raise core.Refusal('Identifiant dupliqué dans le suivi ; historiques conservés.')
+    return result
+
+def location(directory, archive, name):
+    for current in (directory, archive):
+        if current is not None:
+            try:
+                os.stat(name, dir_fd=current, follow_symlinks=False)
+                return current
+            except FileNotFoundError:
+                pass
+    raise core.Refusal('Exécution introuvable ; aucun travail relancé.')
+
+def write(directory, archive, current, name, record, new=False):
+    encoded = json.dumps(record, ensure_ascii=False).encode()
+    stored = entries(directory, archive)
+    if (new and len(stored) >= MAX_RECORDS) or sum(size for _, _, size in stored) + max(len(encoded), workflows.MAX_RECIPE) > MAX_BYTES:
+        raise core.Refusal('Budget de suivi atteint (16 Mio, historique et écriture atomique compris) ; consultation disponible, aucune purge ni relance.')
+    workflows.write(current, name, record)
+
+def rotate(directory, archive, stored):
+    hot = [(name, workflows.read(directory, name)) for current, name, _ in stored if current == directory]
+    if len(hot) < MAX_HOT:
+        return
+    candidates = sorted((record.get('created_at', 0), name) for name, record in hot
+                        if record['state'] in TERMINAL and not record.get('effect_uncertain'))
+    needed = len(hot) - MAX_HOT // 2
+    if len(candidates) < needed:
+        needed = len(hot) - MAX_HOT + 1
+    if len(candidates) < needed:
+        raise core.Refusal('Suivi actif plein ; aucune exécution active ou incertaine archivée.', 'decision_required')
+    for _, name in candidates[:needed]:
+        try:
+            os.stat(name, dir_fd=archive, follow_symlinks=False)
+        except FileNotFoundError:
+            os.rename(name, name, src_dir_fd=directory, dst_dir_fd=archive)
+        else:
+            raise core.Refusal('Historique existant ; aucun fichier remplacé.')
+    os.fsync(directory)
+    os.fsync(archive)
 
 
 def version():
@@ -77,8 +152,8 @@ def valid_id(identifier):
 
 def get(identifier, project):
     valid_id(identifier)
-    with locked() as directory:
-        record = workflows.read(directory, identifier + '.json')
+    with locked() as directory, history(directory) as archive:
+        record = workflows.read(location(directory, archive, identifier + '.json'), identifier + '.json')
     if record.get('project') != str(project) or record.get('execution_id') != identifier:
         raise core.Refusal('Exécution hors du projet demandé.')
     return record
@@ -86,11 +161,12 @@ def get(identifier, project):
 
 def update(identifier, **changes):
     valid_id(identifier)
-    with locked() as directory:
-        record = workflows.read(directory, identifier + '.json')
+    with locked() as directory, history(directory) as archive:
+        current = location(directory, archive, identifier + '.json')
+        record = workflows.read(current, identifier + '.json')
         record.update(changes)
         record['updated_at'] = time.time()
-        workflows.write(directory, identifier + '.json', record)
+        write(directory, archive, current, identifier + '.json', record)
     return record
 
 
@@ -141,11 +217,10 @@ def begin(identifier, params, snapshot=None):
     cached = None
     key = REQUEST_ID.get()
     key = hashlib.sha256(key.encode()).hexdigest() if key else None
-    with locked() as directory:
-        for name in os.listdir(directory):
-            if not name.endswith('.json'):
-                continue
-            record = workflows.read(directory, name)
+    with locked() as directory, history(directory, create=True) as archive:
+        stored = entries(directory, archive)
+        for current, name, _ in stored:
+            record = workflows.read(current, name)
             if record['project'] != params['project']:
                 continue
             if key is not None and key == record.get('request_key'):
@@ -165,16 +240,20 @@ def begin(identifier, params, snapshot=None):
                     and (key is None or record.get('request_key') is None)):
                 cached = record
         if cached is None:
+            if len(stored) >= MAX_RECORDS or sum(size for _, _, size in stored) + workflows.MAX_RECIPE > MAX_BYTES:
+                raise core.Refusal('Budget de suivi atteint (16 Mio / 16 384 entrées, historique compris) ; consultation disponible, aucune purge ni relance.')
+            rotate(directory, archive, stored)
             execution_id = uuid.uuid4().hex
             scope = hashlib.sha256(json.dumps(params, sort_keys=True, allow_nan=False).encode()).hexdigest()
             record = {'execution_id': execution_id, 'id': identifier, 'project': params['project'], 'scope': scope,
                       'engine': version(), 'signature': signature, 'state': 'starting', 'owner_pid': os.getpid(),
                       'created_at': time.time(), 'stages': ['parameters_validated'], 'evidence': [], 'request_key': key}
-            workflows.write(directory, execution_id + '.json', record)
+            write(directory, archive, directory, execution_id + '.json', record, new=True)
             return execution_id, None
         if key is not None:
             cached['request_key'] = key
-            workflows.write(directory, cached['execution_id'] + '.json', cached)
+            name = cached['execution_id'] + '.json'
+            write(directory, archive, location(directory, archive, name), name, cached)
     try:
         receipt = proof(cached)
     except (OSError, ValueError, core.Refusal) as error:
@@ -222,8 +301,8 @@ def proof(record):
 
 def finish(execution_id, result):
     hashes = {}
-    with locked() as directory:
-        record = workflows.read(directory, execution_id + '.json')
+    with locked() as directory, history(directory) as archive:
+        record = workflows.read(location(directory, archive, execution_id + '.json'), execution_id + '.json')
     project = core.project_path(record['project'])
     for value in result.get('evidence', []):
         path = Path(value)
