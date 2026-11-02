@@ -8,7 +8,7 @@ permissions:
 jobs:
   verify:
     name: verify
-    runs-on: macos-latest
+    runs-on: macos-15-intel
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -41,7 +41,7 @@ jobs:
             output/task-tmp/stdout.log
   security:
     name: security
-    runs-on: macos-latest
+    runs-on: macos-15-intel
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

@@ -82,13 +82,14 @@ class ExecutionTest(unittest.TestCase):
         from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
         import threading
         entered = threading.Event()
+        release = threading.Event()
         calls = []
 
         class Slow(BaseHTTPRequestHandler):
             def do_GET(self):
                 calls.append(self.path)
                 entered.set()
-                time.sleep(1.8)
+                release.wait(20)
                 try:
                     self.send_response(200)
                     self.end_headers()
@@ -105,34 +106,35 @@ class ExecutionTest(unittest.TestCase):
             with tempfile.TemporaryDirectory(dir=os.environ['TASK_WORKSPACE']) as tmp:
                 project = make_fixture(tmp)
                 args = {'id': 'web.api-health', 'params': {'project': str(project), 'port': server.server_port}}
-                async with connection(project) as primary:
+                # Both transports must be ready before the HTTP client starts its two-second timeout.
+                async with connection(project) as primary, connection(project) as observer:
                     request = asyncio.create_task(rpc(primary, 'routines_run', args))
                     self.assertTrue(await asyncio.to_thread(entered.wait, 5))
-                    async with connection(project) as observer:
-                        duplicate, _ = await rpc(observer, 'routines_run', args)
-                        self.assertEqual(duplicate['status'], 'running', duplicate)
-                        identifier = duplicate['execution_id']
-                        metadata = project.parent / (project.name + '-definitions-executions') / (identifier + '.json')
-                        owner = json.loads(metadata.read_text())['owner_pid']
-                        self.assertNotEqual(owner, os.getpid())
-                        os.kill(owner, signal.SIGTERM)
-                        with self.assertRaises(Exception):
-                            await request
-                        interrupted, _ = await rpc(observer, 'routines_run', {'id': 'executions.inspect', 'params': {
-                            'project': str(project), 'execution_id': identifier}})
-                        self.assertEqual(interrupted['status'], 'decision_required', interrupted)
-                        again, _ = await rpc(observer, 'routines_run', args)
-                        self.assertEqual(again['execution_id'], identifier)
-                        self.assertEqual(again['status'], 'decision_required')
-                        self.assertEqual(len(calls), 1)
-                        refused, _ = await rpc(observer, 'routines_run', {'id': 'executions.resume', 'params': {
-                            'project': str(project), 'execution_id': identifier}})
-                        self.assertEqual(refused['status'], 'decision_required')
-                        resolved, _ = await rpc(observer, 'routines_run', {'id': 'executions.resolve', 'params': {
-                            'project': str(project), 'execution_id': identifier,
-                            'reason': 'Inspection interrompue constatée ; aucune validation acquise.'}})
-                        self.assertEqual(resolved['status'], 'abandoned', resolved)
+                    duplicate, _ = await rpc(observer, 'routines_run', args)
+                    self.assertEqual(duplicate['status'], 'running', duplicate)
+                    identifier = duplicate['execution_id']
+                    metadata = project.parent / (project.name + '-definitions-executions') / (identifier + '.json')
+                    owner = json.loads(metadata.read_text())['owner_pid']
+                    self.assertNotEqual(owner, os.getpid())
+                    os.kill(owner, signal.SIGTERM)
+                    with self.assertRaises(Exception):
+                        await request
+                    interrupted, _ = await rpc(observer, 'routines_run', {'id': 'executions.inspect', 'params': {
+                        'project': str(project), 'execution_id': identifier}})
+                    self.assertEqual(interrupted['status'], 'decision_required', interrupted)
+                    again, _ = await rpc(observer, 'routines_run', args)
+                    self.assertEqual(again['execution_id'], identifier)
+                    self.assertEqual(again['status'], 'decision_required')
+                    self.assertEqual(len(calls), 1)
+                    refused, _ = await rpc(observer, 'routines_run', {'id': 'executions.resume', 'params': {
+                        'project': str(project), 'execution_id': identifier}})
+                    self.assertEqual(refused['status'], 'decision_required')
+                    resolved, _ = await rpc(observer, 'routines_run', {'id': 'executions.resolve', 'params': {
+                        'project': str(project), 'execution_id': identifier,
+                        'reason': 'Inspection interrompue constatée ; aucune validation acquise.'}})
+                    self.assertEqual(resolved['status'], 'abandoned', resolved)
         finally:
+            release.set()
             server.shutdown()
             server.server_close()
             thread.join(timeout=5)
