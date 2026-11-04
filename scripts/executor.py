@@ -29,6 +29,8 @@ import routines
 MAX_INPUT = 8 * 1024 * 1024
 MAX_CAPTURE = 256 * 1024
 MAX_EVIDENCE = 16 * 1024 * 1024
+MAX_HOT_EVIDENCE = 1024
+MAX_EVIDENCE_RECORDS = 16 * MAX_HOT_EVIDENCE
 COMMANDS = 0
 READS = {}
 ERROR_INDEX = []
@@ -251,7 +253,13 @@ def local_path(project, value):
         current = current / part
         if current.is_symlink():
             raise Refusal('Les liens symboliques ne sont pas suivis.')
-    resolved = path.resolve(strict=True)
+    try:
+        resolved = path.resolve(strict=True)
+    except FileNotFoundError:
+        # Old receipt references remain readable after a one-way archive move.
+        if relative.parts[:2] == ('output', 'routines-evidence') and len(relative.parts) == 3 and re.fullmatch(r'[a-f0-9]{32}\.json', relative.name):
+            return local_path(project, str(relative.parent / 'history' / relative.name))
+        raise
     if not resolved.is_relative_to(project) or forbidden(resolved):
         raise Refusal('Chemin hors projet ou protégé.')
     return resolved
@@ -791,8 +799,41 @@ def execute(identifier, params):
     return result
 
 
+def rotate_evidence(project, directory, archive, hot):
+    import executions
+    candidates = []
+    for name, info in hot:
+        receipt = json.loads(read_bytes(project, 'output/routines-evidence/' + name, MAX_CAPTURE))
+        if (receipt.get('status') not in executions.TERMINAL or receipt.get('effect_uncertain')
+                or receipt.get('operation_state') in ('starting', 'running', 'unknown')):
+            continue
+        if receipt.get('execution_id'):
+            try:
+                tracked = executions.get(receipt['execution_id'], project)
+            except FileNotFoundError:
+                continue
+            if tracked['state'] not in executions.TERMINAL or tracked.get('effect_uncertain'):
+                continue
+        candidates.append((info.st_mtime_ns, name))
+    needed = len(hot) - MAX_HOT_EVIDENCE // 2
+    if len(candidates) < needed:
+        needed = len(hot) - MAX_HOT_EVIDENCE + 1
+    if len(candidates) < needed:
+        raise Refusal('Preuves actives ou incertaines pleines ; aucun reçu déplacé.', 'decision_required')
+    for _, name in sorted(candidates)[:needed]:
+        try:
+            os.stat(name, dir_fd=archive, follow_symlinks=False)
+        except FileNotFoundError:
+            os.rename(name, name, src_dir_fd=directory, dst_dir_fd=archive)
+        else:
+            raise Refusal('Preuve historique existante ; aucun reçu remplacé.')
+    os.fsync(directory)
+    os.fsync(archive)
+
+
 @contextmanager
 def evidence_dir(project):
+    import executions
     path = project / 'output/routines-evidence'
     with directory_fd(path, create=True) as directory:
         mode = os.fstat(directory)
@@ -806,19 +847,33 @@ def evidence_dir(project):
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 raise Refusal('Une autre routine utilise les preuves de ce projet ; aucune attente ni relance automatique.') from None
-            count = total = 0
-            with os.scandir(directory) as files:
-                for item in files:
-                    if item.name == '.lock':
-                        continue
-                    info = item.stat(follow_symlinks=False)
-                    if not stat.S_ISREG(info.st_mode):
-                        raise Refusal('Entrée de preuves non régulière.')
-                    count += 1
-                    total += info.st_size
-                    if count >= 1024 or total + MAX_CAPTURE > MAX_EVIDENCE:
-                        raise Refusal('Budget de preuves atteint (16 Mio / 1024 reçus) ; préserver avant nettoyage autorisé.')
-            yield path, directory
+            with ExitStack() as stack:
+                archive = stack.enter_context(executions.history(directory))
+                count = total = 0
+                names, hot = set(), []
+                for current in (directory, archive) if archive is not None else (directory,):
+                    with os.scandir(current) as files:
+                        for item in files:
+                            if current == directory and (item.name == '.lock' or (item.name == 'history' and archive is not None)):
+                                continue
+                            info = item.stat(follow_symlinks=False)
+                            if (not re.fullmatch(r'[a-f0-9]{32}\.json', item.name)
+                                    or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                                    or info.st_uid != os.getuid() or info.st_mode & 0o077
+                                    or info.st_size > MAX_CAPTURE or item.name in names):
+                                raise Refusal('Entrée de preuves non régulière, étrangère ou dupliquée.')
+                            names.add(item.name)
+                            count += 1
+                            total += info.st_size
+                            if count >= MAX_EVIDENCE_RECORDS or total + MAX_CAPTURE > MAX_EVIDENCE:
+                                raise Refusal('Budget cumulé des preuves atteint (16 Mio / 16 384 reçus) ; aucun reçu supprimé.', 'decision_required')
+                            if current == directory:
+                                hot.append((item.name, info))
+                if len(hot) >= MAX_HOT_EVIDENCE:
+                    if archive is None:
+                        archive = stack.enter_context(executions.history(directory, create=True))
+                    rotate_evidence(project, directory, archive, hot)
+                yield path, directory
         finally:
             os.close(lock)
 

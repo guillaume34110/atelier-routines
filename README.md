@@ -1,6 +1,6 @@
 # Atelier routines
 
-Version **1.2.1** : `rtk proxy atelier-routines --version`. La CLI, l’initialisation MCP et les métadonnées installées partagent la même version.
+Version **1.2.2** : `rtk proxy atelier-routines --version`. La CLI, l’initialisation MCP et les métadonnées installées partagent la même version.
 
 Serveur MCP local en Python pour les étapes mécaniques : inspections, recettes déclaratives, suivi durable et collecte vérifiée. Deux outils seulement, `routines_find` et `routines_run` ; les descriptions du catalogue ne sont pas chargées dans leurs définitions.
 
@@ -52,7 +52,9 @@ Chaque opération reçoit un `execution_id` enregistré avant son lancement. `ex
 
 Le suivi est global à l’installation. Dès 1 024 entrées courantes, les plus anciens suivis terminés sont déplacés atomiquement dans `atelier-routines-executions/history`, sans modifier leurs octets ni leurs preuves. Les opérations actives, incertaines et aux effets non confirmés restent en place. Les anciens `execution_id` et `request_id` restent consultables et participent à la déduplication ; un reçu historique ne valide pas les faits actuels. Le plafond total reste de **16 Mio**, écritures atomiques comprises, avec au plus **16 384 entrées** courantes et historiques. Atteindre ce plafond refuse un nouveau travail mais laisse la consultation disponible ; aucune purge ni nouvelle soumission automatique. Les reçus par projet gardent leur propre plafond.
 
-Pour reprendre après le blocage des versions précédentes, recharger la connexion MCP sur la version 1.2.1, consulter l’`execution_id` connu avec `executions.inspect`, puis seulement demander l’inspection nécessaire. Une exécution incertaine reste à résoudre explicitement ; ne pas changer sa clé ou relancer un calcul pour éviter son suivi. La migration conserve aussi l’éventuelle 1 025e entrée admise par l’ancien contrôle.
+Les preuves propres à chaque projet tournent séparément depuis la version 1.2.2 : au seuil de 1 024 reçus courants, les plus anciens reçus terminés vont dans `output/routines-evidence/history`, sous le même verrou. Les octets, empreintes, identifiants et clés de déduplication sont conservés. Les reçus actifs ou incertains restent courants. Courant et historique restent bornés ensemble à **16 Mio / 16 384 reçus**. Les anciens chemins logiques restent lisibles par la CLI et le MCP ; `executions.inspect` renvoie l’emplacement actuel. Un ancien lien direct dans le système de fichiers peut nécessiter cette consultation après déplacement.
+
+Pour reprendre après le blocage des versions précédentes, recharger la connexion MCP sur la version 1.2.2, consulter l’`execution_id` connu avec `executions.inspect`, puis seulement demander l’inspection nécessaire. Une exécution incertaine reste à résoudre explicitement ; ne pas changer sa clé ou relancer un calcul pour éviter son suivi. La migration conserve aussi l’éventuelle 1 025e entrée admise par l’ancien contrôle du suivi. Un plafond cumulé ou des reçus tous actifs reste un refus explicite, jamais une purge automatique.
 
 Les résultats de certaines inspections de fichiers peuvent être réutilisés après vérification SHA256 des entrées, du code, de Python, du verrou de dépendances et des preuves. Un reçu absent ou altéré exige une décision. Git, services, ressources, autorisations et tests ne sont pas mis en cache comme vérités actuelles. Une nouvelle révision ne récupère pas un ancien test vert.
 

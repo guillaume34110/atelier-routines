@@ -198,7 +198,7 @@ def verified_view(record):
     result = view(record)
     if record['state'] in ('ok', 'error', 'partial') and record.get('evidence'):
         try:
-            proof(record)
+            result['evidence'] = proof(record)['evidence']
         except (OSError, ValueError, core.Refusal) as error:
             result.update(status='decision_required', decision='Preuve absente ou altérée : ' + str(error)[:100])
     elif record['state'] == 'ok':
@@ -274,7 +274,7 @@ def proof(record):
     project = core.project_path(record['project'])
     for value in paths:
         path = Path(value)
-        if not path.is_relative_to(project / 'output/routines-evidence') or not re.fullmatch(r'[a-f0-9]{32}\.json', path.name):
+        if path.parent not in (project / 'output/routines-evidence', project / 'output/routines-evidence/history') or not re.fullmatch(r'[a-f0-9]{32}\.json', path.name):
             raise core.Refusal('Chemin de reçu non autorisé.')
         data = core.read_bytes(project, str(path.relative_to(project)), core.MAX_CAPTURE)
         if hashlib.sha256(data).hexdigest() != record['proof_hashes'].get(value):
@@ -296,6 +296,7 @@ def proof(record):
         data = core.read_bytes(project, str(path.relative_to(project)))
         if hashlib.sha256(data).hexdigest() != expected:
             raise core.Refusal('Empreinte d’artefact différente.')
+    first['evidence'] = [str(core.local_path(project, str(Path(value).relative_to(project)))) for value in paths]
     return first
 
 
@@ -330,7 +331,7 @@ def inspect(project, params):
     start = params['start']
     return {'id': record['id'], 'execution_id': record['execution_id'], 'status': record['state'],
             'result': {'total_entries': len(selected), 'start': start,
-                       'entries': selected[start:start + params['limit']]}, 'evidence': record['evidence']}
+                       'entries': selected[start:start + params['limit']]}, 'evidence': receipt['evidence']}
 
 
 def resolve(project, params):
