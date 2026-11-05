@@ -12,7 +12,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = '1.2.1'
+VERSION = '1.2.2'
 CATALOGUE = Path(__file__).resolve().parents[1] / 'references/catalogue.json'
 BIN = Path.home() / '.local/bin'
 
