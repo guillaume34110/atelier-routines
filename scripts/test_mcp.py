@@ -55,6 +55,7 @@ def make_fixture(parent):
 @asynccontextmanager
 async def connection(project, **overrides):
     env = {'PATH': os.environ['PATH'], 'ATELIER_ROUTINES_ROOTS': json.dumps([str(project)]),
+           'ATELIER_ROUTINES_DECISION':'off',
            'ATELIER_ROUTINES_STORE': str(project.parent / (project.name + '-definitions')),
            'PYTHONDONTWRITEBYTECODE': '1',
            **{k: v for k, v in os.environ.items() if k.startswith('USEVPS_')}, **overrides}

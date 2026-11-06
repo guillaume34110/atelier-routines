@@ -11,6 +11,7 @@ from mcp.types import CallToolResult, TextContent, Tool, ToolAnnotations
 
 import executor
 import executions
+import usage
 
 server = Server('atelier-routines', version=executor.routines.VERSION)
 
@@ -18,36 +19,38 @@ server = Server('atelier-routines', version=executor.routines.VERSION)
 @server.list_tools()
 async def list_tools():
     return [
-        Tool(name='routines_find', description='Trouver au plus 3 routines : ID, disponibilité, paramètres. Aucune exécution.',
+        Tool(name='routines_find', description='Trouver 3 routines maximum. Ambiguïté : d1 local consulté automatiquement avant Sol ; repli explicite. Aucune routine exécutée.',
              inputSchema={'type': 'object', 'properties': {
                  'query': {'type': 'string', 'minLength': 1, 'maxLength': 300},
                  'limit': {'type': 'integer', 'minimum': 1, 'maximum': 3, 'default': 3}},
                  'required': ['query'], 'additionalProperties': False},
              annotations=ToolAnnotations(readOnlyHint=True, openWorldHint=False)),
-        Tool(name='routines_run', description='ID connu : exécuter avec son schéma. Statut explicite, résultat compact et preuves. Procédures guidées signalées.',
+        Tool(name='routines_run', description='ID connu : exécuter avec son schéma. Décision fermée : decision.evaluate (d1 local) en priorité, Sol en repli. Résultat compact et preuves ; gardes inchangés.',
              inputSchema={'type': 'object', 'properties': {
                  'id': {'type': 'string', 'maxLength': 100}, 'params': {'type': 'object'},
                  'request_id': {'type': 'string', 'minLength': 1, 'maxLength': 64}},
                  'required': ['id', 'params'], 'additionalProperties': False},
-             annotations=ToolAnnotations(destructiveHint=False, openWorldHint=False)),
+             annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=True, openWorldHint=True)),
     ]
 
 
 @server.call_tool(validate_input=False)
 async def call_tool(name, arguments):
-    try:
-        allowed = {'query', 'limit'} if name == 'routines_find' else {'id', 'params', 'request_id'}
-        required = {'query'} if name == 'routines_find' else {'id', 'params'}
-        if type(arguments) is not dict or set(arguments) - allowed or not required <= arguments.keys():
-            raise executor.Refusal('Paramètres d’outil manquants ou inconnus.')
-        if name == 'routines_find':
-            result = executor.find(arguments['query'], arguments.get('limit', 3))
-        elif name == 'routines_run':
-            result = await executions.dispatch(arguments['id'], arguments['params'], request_id=arguments.get('request_id'))
-        else:
-            result = {'status': 'error', 'message': 'Outil inconnu.'}
-    except executor.Refusal as error:
-        result = {'status': error.status, 'message': str(error)}
+    with usage.capture('mcp', usage.operation(name, arguments), arguments) as observation:
+        try:
+            allowed = {'query', 'limit'} if name == 'routines_find' else {'id', 'params', 'request_id'}
+            required = {'query'} if name == 'routines_find' else {'id', 'params'}
+            if type(arguments) is not dict or set(arguments) - allowed or not required <= arguments.keys():
+                raise executor.Refusal('Paramètres d’outil manquants ou inconnus.')
+            if name == 'routines_find':
+                result = await asyncio.to_thread(executor.find,arguments['query'],arguments.get('limit',3))
+            elif name == 'routines_run':
+                result = await executions.dispatch(arguments['id'], arguments['params'], request_id=arguments.get('request_id'))
+            else:
+                result = {'status': 'error', 'message': 'Outil inconnu.'}
+        except executor.Refusal as error:
+            result = {'status': error.status, 'message': str(error)}
+        observation.update(result)
     return CallToolResult(content=[TextContent(type='text', text=json.dumps(result, ensure_ascii=False))],
                           isError=result.get('status') in ('error', 'timeout', 'unavailable'))
 

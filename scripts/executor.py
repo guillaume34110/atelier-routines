@@ -1,4 +1,4 @@
-"""Read-only routines shared by the CLI and MCP; no catalogue command is evaluated."""
+"""Fixed routines shared by the CLI and MCP; no catalogue command is evaluated."""
 import ast
 from collections import Counter
 import csv
@@ -106,6 +106,20 @@ SCHEMAS.update({
                         seconds={'type': 'integer', 'minimum': 1, 'maximum': 3600, 'default': 900}),
 })
 
+import github_ops
+GITHUB_SCHEMAS = github_ops.schemas(schema)
+SCHEMAS.update(GITHUB_SCHEMAS)
+DECISION_THRESHOLD = {'type':'number','minimum':.9,'maximum':1,'default':.99}
+SCHEMAS.update({
+    'decision.status': schema(),
+    'decision.evaluate': {
+        **schema(file=FILE,input={'type':'object','maxBytes':65536},min_confidence=DECISION_THRESHOLD),
+        'required':['project'], 'oneOf':[{'required':['file']},{'required':['input']}],
+    },
+    'decision.prepare-vps': schema(file=FILE,min_confidence=DECISION_THRESHOLD),
+    'decision.result': schema(file=FILE,request=FILE,min_confidence=DECISION_THRESHOLD),
+})
+
 
 def storage_guard():
     path = Path('/app/storage-guard.py') if sys.platform.startswith('linux') else routines.BIN / 'storage-guard.py'
@@ -134,6 +148,8 @@ def availability(entry):
     required = ['rtk']
     if entry['id'].startswith('git.') or entry['id'] == 'system.context':
         required.append('git')
+    if entry['id'] in GITHUB_SCHEMAS:
+        required.extend(('git', 'gh'))
     if entry['id'] in ('project.tree', 'project.search', 'project.symbol'):
         required.append('rg')
     if entry['id'] == 'system.processes':
@@ -165,11 +181,15 @@ def find(query, limit=3):
     if type(limit) is not int or not 1 <= limit <= 3:
         raise Refusal('limit doit être un entier entre 1 et 3.')
     found = []
-    for entry in routines.match(catalogue(), query)[:limit]:
+    import decision
+    candidates, local_decision = decision.route_candidates(query,routines.match(catalogue(),query))
+    for entry in candidates[:limit]:
         state, needs = availability(entry)
         found.append({'id': entry['id'], 'description': entry['description'], 'availability': state,
                       'params': parameters(entry), 'prerequisites': needs})
     result = {'matches': found, 'executed': False}
+    if local_decision is not None:
+        result['local_decision'] = local_decision
     while len(json.dumps(result, ensure_ascii=False).encode()) > 1950 and len(found) > 1:
         result.setdefault('alternatives', []).insert(0, found.pop()['id'])
     return result
@@ -192,8 +212,12 @@ def validate(identifier, params):
         return {}
     if set(params) - spec['properties'].keys() or set(spec['required']) - params.keys():
         raise Refusal('Paramètres manquants ou inconnus ; consulter routines_find.')
+    if 'oneOf' in spec and sum(set(mode['required']) <= params.keys() for mode in spec['oneOf']) != 1:
+        raise Refusal('Choisir exactement un mode : file ou input.')
     result = {}
     for name, rule in spec['properties'].items():
+        if name not in params and 'default' not in rule:
+            continue
         value = params.get(name, rule.get('default'))
         validate_value(name, rule, value)
         result[name] = value
@@ -207,6 +231,13 @@ def validate_value(name, rule, value):
         valid = type(value) is bool
     elif rule['type'] == 'array':
         valid = type(value) is list and rule.get('minItems', 0) <= len(value) <= rule.get('maxItems', 16)
+    elif rule['type'] == 'object':
+        valid = type(value) is dict
+        if valid:
+            try:
+                valid = len(json.dumps(value,ensure_ascii=False,allow_nan=False).encode()) <= rule.get('maxBytes',65536)
+            except (ValueError,TypeError,RecursionError):
+                valid = False
     else:
         valid = type(value) in ((int,) if rule['type'] == 'integer' else (int, float))
         valid = valid and rule.get('minimum', -math.inf) <= value <= rule.get('maximum', math.inf)
@@ -320,7 +351,7 @@ def redact(text):
     return re.sub(r'\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]+)\b', '[REDACTED]', text)
 
 
-def capture(argv, cwd, timeout=12, limit=MAX_CAPTURE, payload=None, group=False):
+def capture(argv, cwd, timeout=12, limit=MAX_CAPTURE, payload=None, group=False, credentials=None):
     """Bound bytes and lifetime, including the dispatcher and its children."""
     global COMMANDS
     COMMANDS += 1
@@ -328,6 +359,10 @@ def capture(argv, cwd, timeout=12, limit=MAX_CAPTURE, payload=None, group=False)
         raise Refusal('Commande interne non préfixée par rtk.')
     permitted = {'PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR', 'TASK_WORKSPACE', 'PYTHONDONTWRITEBYTECODE'}
     env = {k: v for k, v in os.environ.items() if k in permitted or k.startswith(('ATELIER_ROUTINES_', 'USEVPS_'))}
+    if credentials is not None:
+        if set(credentials) != {'GH_TOKEN'} or type(credentials['GH_TOKEN']) is not str or not credentials['GH_TOKEN']:
+            raise Refusal('Credential interne GitHub invalide.')
+        env.update(credentials)
     process = subprocess.Popen(argv, cwd=cwd, env=env, stdin=subprocess.PIPE if payload else subprocess.DEVNULL,
                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, process_group=0 if group else None)
     if group:
@@ -384,6 +419,27 @@ def git(project, *args):
     if code and not limited:
         raise Refusal('Git a échoué (code ' + str(code) + ') : ' + redact(text[:180]))
     return text, limited
+
+
+def git_remotes(project):
+    text, partial = git(project, 'remote', '-v')
+    if partial:
+        raise Refusal('Liste des remotes tronquée.', 'partial')
+    details, seen = [], set()
+    for line in text.splitlines():
+        fields = line.split()
+        if len(fields) != 3 or fields[2] not in ('(fetch)', '(push)') or tuple(fields) in seen:
+            continue
+        seen.add(tuple(fields))
+        parsed = urlsplit(fields[1])
+        host, path, transport = parsed.hostname, parsed.path, parsed.scheme
+        if not transport:
+            scp = re.fullmatch(r'(?:[^@/]+@)?([\w.-]+):(.+)', fields[1])
+            host, path, transport = (scp[1], scp[2], 'ssh') if scp else (None, '', 'local')
+        repo = '/'.join(path.strip('/').split('/')[-2:])
+        details.append({'name': fields[0], 'direction': fields[2][1:-1], 'transport': transport, 'host': host,
+                        'repository': redact(repo) if transport != 'local' else '[local path omitted]'})
+    return details
 
 
 def diff(project, staged=False):
@@ -519,23 +575,8 @@ def extra_execute(identifier, project, params):
                 details.append(dict(zip(('branch', 'commit', 'upstream', 'divergence', 'active'), fields)))
         summary = {'branches': len(details), 'scope': 'Références locales ; aucun fetch, cible de PR non déduite.'}
     elif identifier == 'git.remote':
-        text, partial = git(project, 'remote', '-v')
-        seen = set()
-        for line in text.splitlines():
-            fields = line.split()
-            if len(fields) < 2 or fields[0] in seen:
-                continue
-            seen.add(fields[0])
-            raw = fields[1]
-            parsed = urlsplit(raw)
-            host, path, transport = parsed.hostname, parsed.path, parsed.scheme
-            if not transport:
-                scp = re.fullmatch(r'(?:[^@/]+@)?([\w.-]+):(.+)', raw)
-                host, path, transport = (scp[1], scp[2], 'ssh') if scp else (None, '', 'local')
-            repo = '/'.join(path.strip('/').split('/')[-2:])
-            details.append({'name': fields[0], 'transport': transport, 'host': host,
-                            'repository': redact(repo) if transport != 'local' else '[local path omitted]'})
-        summary = {'remotes': len(details), 'credentials_omitted': True}
+        details = git_remotes(project)
+        summary = {'remotes': len({r['name'] for r in details}), 'destinations': len(details), 'credentials_omitted': True}
     elif identifier == 'files.archive':
         if Path(params['file']).suffix.casefold() != '.zip':
             raise Refusal('Inspection autonome ZIP seulement ; autres formats : procédure guidée.', 'unavailable')
@@ -637,8 +678,15 @@ def extra_execute(identifier, project, params):
     return summary, details, partial
 
 
-def execute(identifier, params):
+def execute(identifier, params, runtime=None):
     project = project_path(params['project'])
+    if identifier.startswith('decision.'):
+        import decision
+        value = decision.execute(identifier,project,params)
+        value['inputs'] = list(READS.values())
+        return value
+    if identifier in GITHUB_SCHEMAS:
+        return github_ops.execute(identifier, project, params, runtime)
     if identifier.startswith(('custom.', 'routines.')):
         import workflows
         return workflows.execute(identifier, project, params)
@@ -878,7 +926,7 @@ def evidence_dir(project):
             os.close(lock)
 
 
-def run(identifier, params):
+def run(identifier, params, resume_id=None, wait_seconds=0, reconcile=False):
     started = time.monotonic()
     record = {'id': identifier if isinstance(identifier, str) and len(identifier) < 100 else 'unknown',
               'status': 'error', 'evidence': []}
@@ -886,6 +934,7 @@ def run(identifier, params):
     stack = ExitStack()
     execution_id = None
     launched = False
+    previous_uncertainty = False
     try:
         if type(identifier) is not str:
             raise Refusal('id doit être un identifiant de routine.')
@@ -910,21 +959,38 @@ def run(identifier, params):
         if identifier in executions.CACHEABLE:
             data = read_bytes(project, params['file'])
             snapshot = hashlib.sha256(data).hexdigest()
-        execution_id, existing = executions.begin(identifier, params, snapshot)
-        if existing is not None:
-            existing['lookup_duration_ms'] = round((time.monotonic() - started) * 1000, 2)
-            return existing
+        if resume_id is not None:
+            previous = executions.get(resume_id, project)
+            if (identifier not in GITHUB_SCHEMAS or previous['id'] != identifier or previous.get('params') != params
+                    or previous['engine'] != executions.version()
+                    or (previous['state'] in executions.ACTIVE and executions.alive(previous.get('owner_pid')))):
+                raise Refusal('Reprise GitHub incompatible ou exécution encore active.', 'decision_required')
+            execution_id = resume_id
+            previous_uncertainty = previous.get('effect_uncertain', False)
+        else:
+            execution_id, existing = executions.begin(identifier, params, snapshot)
+            if existing is not None:
+                existing['lookup_duration_ms'] = round((time.monotonic() - started) * 1000, 2)
+                return existing
         record['execution_id'] = execution_id
         record['engine_version'] = executions.get(execution_id, project)['engine']
         record['operation_state'] = 'running'
         executions.update(execution_id, state='running', stages=['parameters_validated', 'operation_started'])
+        if identifier in GITHUB_SCHEMAS:
+            executions.update(execution_id, params=params, owner_pid=os.getpid())
         destination, directory = stack.enter_context(evidence_dir(project))
         timeout = float(os.environ.get('ATELIER_ROUTINES_TIMEOUT', '15'))
         if not 0 < timeout <= 30:
             raise Refusal('Le délai configuré doit être >0 et ≤30 secondes.')
+        payload = params
+        if identifier in GITHUB_SCHEMAS:
+            timeout = max(90, params.get('wait', 0) + 90, wait_seconds + 90)
+            payload = {**params, '_runtime': {'reconcile': reconcile, 'wait_seconds': max(wait_seconds, params.get('wait', 0))}}
         launched = True
+        if identifier in github_ops.WRITES:
+            record['effect_uncertain'] = True
         code, text, limited = capture(['rtk', 'proxy', sys.executable, str(Path(__file__).resolve()), '_worker', identifier],
-                                     project, timeout=timeout, payload=json.dumps(params).encode(), group=True)
+                                     project, timeout=timeout, payload=json.dumps(payload).encode(), group=True)
         if limited:
             raise Refusal('Résultat interne trop volumineux ; réduire le périmètre.')
         if code:
@@ -934,8 +1000,11 @@ def run(identifier, params):
         except json.JSONDecodeError:
             raise Refusal('Réponse du processus interne non JSON : ' + redact(text[:160])) from None
         if worker['status'] != 'ok':
+            record['effect_uncertain'] = previous_uncertainty or worker.get('effect_uncertain', False)
             raise Refusal(worker['message'], worker['status'])
         result = worker['result']
+        if identifier in GITHUB_SCHEMAS:
+            record['effect_uncertain'] = False
         if identifier in executions.CACHEABLE:
             observed = next((item['sha256'] for item in result.get('inputs', []) if item['file'] == params['file']), None)
             current = hashlib.sha256(read_bytes(project, params['file'])).hexdigest()
@@ -946,8 +1015,10 @@ def run(identifier, params):
                       validation_status=result.get('validation_status', 'not_requested'))
     except (Refusal, OSError, ValueError, TypeError) as error:
         state = getattr(error, 'status', 'error')
+        if launched and identifier in github_ops.WRITES and record.get('effect_uncertain'):
+            state = 'decision_required'
         record.update(status=state, message=redact(str(error))[:300],
-                      operation_state='timeout' if state == 'timeout' else 'completed' if launched else 'refused')
+                      operation_state='unknown' if record.get('effect_uncertain') else 'timeout' if state == 'timeout' else 'completed' if launched else 'refused')
     record['duration_ms'] = round((time.monotonic() - started) * 1000, 2)
     if INTERRUPTED and execution_id is not None:
         record.update(status='decision_required', operation_state='unknown',
@@ -983,11 +1054,17 @@ def compact(record):
     encoded = json.dumps(record, ensure_ascii=False).encode()
     if len(encoded) > 1950:
         result = record.get('result', {})
-        record['result'] = {'summary': result.get('summary', {}),
-                            'preview': redact(json.dumps(result.get('details', []), ensure_ascii=False))[:500]}
+        record['result'] = {k: result[k] for k in ('summary', 'partial', 'workflow_status', 'validation_status') if k in result}
+        details = result.get('details', [])
+        if isinstance(details, list):
+            record['result'].update(details=details[:3], total_entries=len(details), has_more=len(details) > 3)
         record['response_truncated'] = True
+        while len(json.dumps(record, ensure_ascii=False).encode()) > 1950 and record['result'].get('details'):
+            record['result']['details'].pop()
+            record['result']['has_more'] = True
         if len(json.dumps(record, ensure_ascii=False).encode()) > 1950:
-            record['result'] = {'preview': redact(json.dumps(result, ensure_ascii=False))[:800]}
+            record['result'].pop('details', None)
+            record['result']['details_in_proof'] = True
     if len(json.dumps(record, ensure_ascii=False).encode()) > 1950:
         record.pop('result', None)
         for key in ('message', 'decision'):
@@ -1007,9 +1084,11 @@ if __name__ == '__main__':
         raise SystemExit('Usage interne seulement.')
     try:
         values = json.loads(sys.stdin.buffer.read(32769))
-        result = execute(sys.argv[2], validate(sys.argv[2], values))
+        runtime = values.pop('_runtime', {}) if sys.argv[2] in GITHUB_SCHEMAS else None
+        result = execute(sys.argv[2], validate(sys.argv[2], values), runtime)
         response = {'status': 'ok', 'result': result}
     except (Refusal, OSError, ValueError, SyntaxError, TypeError, RecursionError, csv.Error, zipfile.BadZipFile,
             http.client.HTTPException, EOFError) as error:
-        response = {'status': getattr(error, 'status', 'error'), 'message': redact(str(error))[:300]}
+        response = {'status': getattr(error, 'status', 'error'), 'message': redact(str(error))[:300],
+                    'effect_uncertain': getattr(error, 'effect_uncertain', False)}
     print(json.dumps(response, ensure_ascii=False))

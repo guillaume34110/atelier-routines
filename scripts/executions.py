@@ -69,6 +69,7 @@ def history(directory, create=False):
     finally:
         os.close(archive)
 
+
 def entries(directory, archive):
     result = []
     for current in (directory, archive):
@@ -91,6 +92,7 @@ def entries(directory, archive):
         raise core.Refusal('Identifiant dupliqué dans le suivi ; historiques conservés.')
     return result
 
+
 def location(directory, archive, name):
     for current in (directory, archive):
         if current is not None:
@@ -101,12 +103,14 @@ def location(directory, archive, name):
                 pass
     raise core.Refusal('Exécution introuvable ; aucun travail relancé.')
 
+
 def write(directory, archive, current, name, record, new=False):
     encoded = json.dumps(record, ensure_ascii=False).encode()
     stored = entries(directory, archive)
     if (new and len(stored) >= MAX_RECORDS) or sum(size for _, _, size in stored) + max(len(encoded), workflows.MAX_RECIPE) > MAX_BYTES:
         raise core.Refusal('Budget de suivi atteint (16 Mio, historique et écriture atomique compris) ; consultation disponible, aucune purge ni relance.')
     workflows.write(current, name, record)
+
 
 def rotate(directory, archive, stored):
     hot = [(name, workflows.read(directory, name)) for current, name, _ in stored if current == directory]
@@ -133,7 +137,8 @@ def rotate(directory, archive, stored):
 def version():
     digest = hashlib.sha256(str(sys.version_info[:3]).encode())
     base = Path(__file__).resolve().parent
-    for name in ('routines.py', 'executor.py', 'workflows.py', 'executions.py', 'vps_cycle.py', 'jobs.py', 'wait_hook.py'):
+    for name in ('routines.py', 'executor.py', 'workflows.py', 'executions.py', 'vps_cycle.py', 'jobs.py', 'wait_hook.py', 'github_ops.py',
+                 'decision.py', 'decision_payload.py', 'decision_runtime.py'):
         path = base / name
         if path.exists():
             digest.update(path.read_bytes())
@@ -191,7 +196,7 @@ def view(record):
             'evidence': record.get('evidence', []), 'remote_job': record.get('remote_job'),
             'released': record.get('released', False), 'submission_attempts': record.get('submission_attempts', 0),
             'temporary_workspace': record.get('temporary_workspace'),
-            'decision': record.get('decision') or ('Appel interrompu : inspecter ; ne pas relancer automatiquement.' if state == 'decision_required' else None)}
+            'decision': record.get('decision') or ((record.get('message') or 'Appel interrompu : inspecter ; ne pas relancer automatiquement.') if state == 'decision_required' else None)}
 
 
 def verified_view(record):
@@ -231,7 +236,9 @@ def begin(identifier, params, snapshot=None):
                 result = verified_view(record)
                 result.update(historical=True, facts_current=False)
                 return None, result
-            if record['state'] in ACTIVE | {'decision_required'}:
+            blocked = record['state'] in ACTIVE or (record['state'] == 'decision_required' and
+                       (record['id'] not in core.GITHUB_SCHEMAS or record.get('effect_uncertain', True)))
+            if blocked:
                 if record['signature'] == signature:
                     return None, view(record)
                 return None, {'id': identifier, 'status': 'decision_required', 'execution_id': record['execution_id'],
@@ -316,7 +323,7 @@ def finish(execution_id, result):
                   validation_status=result.get('validation_status', 'not_requested'),
                   stages=['parameters_validated', 'operation_finished', 'evidence_verified'] if hashes else ['parameters_validated', 'operation_finished'],
                   evidence=result.get('evidence', []), proof_hashes=hashes,
-                  message=result.get('message'), owner_pid=None)
+                  message=result.get('message'), effect_uncertain=result.get('effect_uncertain', False), owner_pid=None)
 
 
 def inspect(project, params):
@@ -434,6 +441,10 @@ async def dispatch(identifier, params, allow_background=True, request_id=None):
             return await jobs.start(project, params)
         if identifier == 'executions.resolve':
             return core.compact(resolve(project, params))
+        if identifier in ('executions.wait', 'executions.resume'):
+            record = get(params['execution_id'], project)
+            if record['id'] in core.GITHUB_SCHEMAS:
+                return await core.github_ops.continue_execution(project, record, params.get('seconds', 0), identifier == 'executions.resume')
         import vps_cycle
         if identifier == 'checks.regression':
             if not allow_background and not params['wait']:

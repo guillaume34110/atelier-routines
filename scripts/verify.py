@@ -119,6 +119,8 @@ def main():
         os.environ['TASK_WORKSPACE'] = str(workspace)
     workspace = Path(os.environ['TASK_WORKSPACE'])
     os.environ['PYTHONDONTWRITEBYTECODE'] = '1'
+    os.environ['ATELIER_ROUTINES_USAGE'] = 'off'
+    os.environ['ATELIER_ROUTINES_DECISION'] = 'off'
     with warnings.catch_warnings():
         warnings.simplefilter('error', SyntaxWarning)
         for path in HERE.glob('*.py'):

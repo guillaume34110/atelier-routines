@@ -13,6 +13,15 @@ from test_mcp import connection, make_fixture, rpc
 
 
 class RoutingTest(unittest.TestCase):
+    def test_github_inspections_route_without_global_account_changes(self):
+        with tempfile.TemporaryDirectory(dir=os.environ['TASK_WORKSPACE']) as tmp:
+            project = make_fixture(tmp)
+            for words, expected in [(['gh', 'auth', 'status'], 'github.context'),
+                                    (['gh', 'pr', 'list'], 'github.prs'),
+                                    (['git', 'remote', '-v'], 'git.remote')]:
+                self.assertEqual(routing_hook.route(words, project / 'src', [project]), (expected, {'project': str(project)}))
+            self.assertIsNone(routing_hook.route(['gh', 'pr', 'list', '--repo', 'other/repo'], project, [project]))
+
     def invoke(self, data, roots):
         result = subprocess.run(['rtk', 'proxy', sys.executable, str(Path(__file__).with_name('routing_hook.py')),
                                  json.dumps([str(p) for p in roots])], input=json.dumps(data),
@@ -27,6 +36,8 @@ class RoutingTest(unittest.TestCase):
             self.assertEqual(result['hookEventName'], event)
             self.assertIn('routines_run', result['additionalContext'])
             self.assertIn('Une simple question ne lance rien', result['additionalContext'])
+            self.assertIn('d1 local en premier',result['additionalContext'])
+            self.assertIn('decision.evaluate',result['additionalContext'])
             self.assertNotIn('permissionDecision', result)
 
     def test_shell_routes_and_exceptions_do_not_execute_the_command(self):

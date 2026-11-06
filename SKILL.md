@@ -5,12 +5,36 @@ description: Use first for every covered project, Git, QA or file operation, inc
 
 # Atelier routines
 
+## Décisions locales d1, usage économe
+
+**Priorité obligatoire : pour toute décision fermée éligible de choix, triage ou lecture d'image, consulter d1 local avant de décider avec Sol.** `routines_find` consulte désormais d1 automatiquement quand plusieurs routines exécutables restent ambiguës, renvoie `local_decision` et journalise cet usage. Les identifiants connus et règles déterministes évitent l'inférence. Pour les autres choix fermés, appeler directement `decision.evaluate`. Sol sert de repli si `usable=false` ou service indisponible. Cette priorité ne confie aucune action, autorisation ou validation au modèle.
+
+Pour une décision fermée ambiguë déjà nécessaire (choix parmi2–8 candidats ou oui/non), appeler directement `decision.evaluate` avec `project` absolu et `input` : aucun fichier à créer pour un choix court. Réutiliser d1 pour choisir une approche parmi des options explicites, trier des cas ou classer des priorités quand ces choix demanderaient autrement un raisonnement Sol. Donner un état court et des critères distincts. `questions` est un objet indexé par identifiant ; une question `choice` contient exactement `type`, `instructions` et `criteria` (objet de2–8 candidats).
+
+```json
+{"id":"decision.evaluate","params":{"project":"/projet","input":{"state":"Tests verts en local, échecs en CI après mise à jour des dépendances.","questions":{"triage":{"type":"choice","instructions":"Quelle piste vérifier en premier ?","criteria":{"environment":"Comparer versions et dépendances local/CI.","logic":"Examiner la logique métier."}}}}}}
+```
+
+Choisir exactement `input` ou `file` (chemin relatif au projet). Les deux modes partagent le même contrat : `state` ou `state_file`,1–4 questions `choice`/`noul`, une image PNG relative maximum. Pour un contexte déjà sur disque, employer `state_file` au lieu de le recopier. Seuil de confiance0,99 par défaut : si `usable=false`/`fallback_required=true`, garder le repli LLM. Un reçu `ok` confirme seulement l'inférence, sans autoriser son choix. Zéro token cloud n'est pas une mesure de tokens économisés. Ne pas appeler le modèle pour une règle déterministe, une simple inspection ou une attente connue.
+
+Le résultat suggère des choix, sans autoriser ni exécuter d'action. Le modèle ne valide jamais tests, sécurité, déploiement, permissions ou succès d'une tâche. Les contrôles déterministes existants restent obligatoires. La confiance est une mesure du modèle, pas une garantie.
+
+`decision.status` vérifie le service sans le démarrer. Pour déporter explicitement une entrée non sensible : `decision.prepare-vps` prépare les arguments de `mcp__atelier_vps__vps_task` (Préprod,CPU2,RAM10Gio), puis utiliser le MCP Atelier VPS, récupérer `work/decision-result.json` et lire avec `decision.result` (`request` pointe vers l'input.json du paquet). Préserver les résultats avant libération. Aucun repli, soumission ou téléchargement implicite ; l'absence des poids VPS est un blocage. Les deux outils MCP restent `routines_find` et `routines_run`.
+
 For every covered operational step, even in one-off work or a subagent, use the known ID directly with MCP `routines_run(id, params)` before an equivalent native command.
 If the ID is unknown, call `routines_find(query, limit=3)` once, then run the selected ID.
 Do not also run a CLI search. A simple question does not authorize executing a routine.
 
 Known IDs need no lookup: `git.status`, `git.diff`, `git.staged`, `git.log`, `git.branches`,
 `project.manifest`, `project.tree`, `project.search`, `files.logs`, `files.json`, `files.csv`.
+For GitHub, start with `github.context`: repositories owned by `guillaume34110` use that account;
+repositories owned by `guillaume-rebaze` use that account. Other owners require one explicit local
+`atelier.githubAccount` binding. Never switch the global account or fall back to the other identity.
+Use `github.prs`, `git.pr-create`, `git.pr-checks`, `git.protection`, `git.integration`, `git.merge`.
+For uncovered GitHub operations, verify that the connector's authenticated login matches this account;
+never write through a connector authenticated as the other person. Git push requires its own verified identity.
+PR creation requires an already published, validated branch and its exact `head_sha`; it does not push.
+Wait on the known execution; resume uncertain GitHub writes by reconciliation only, without resubmission.
 Use receipts for expanded results. Exact source/patch reads needed for editing and operations
 outside routine coverage remain direct; never substitute a statistical diff for a code review.
 The user hooks remind each prompt and subagent, and redirect supported simple shell inspections
@@ -70,7 +94,7 @@ The executable is a link to `scripts/routines.py` in this skill. If it is outsid
 
 `match` uses local French/English keywords, without a model or network. It returns one procedure and at most two alternative IDs; it never executes the operation. Select the appropriate result and carry out its command or steps within the user's authorization. If it misses, use a precise domain/ID or proceed directly; do not repeatedly query or read all catalogue entries. Simple conversation needs no lookup.
 
-`list` shows domain counts; `list DOMAINE` gives a short index. `show ID` returns one entry from [references/catalogue.json](references/catalogue.json). The catalogue has 110 procedures plus three explicitly excluded starter proposals. Procedures may reuse an installed script, guard, skill or connected tool; they are not 110 independent programs. Replace uppercase command placeholders with actual, safely quoted arguments; never evaluate a template as shell code. Missing prerequisites or unavailable tools remain blockers, not successful runs.
+`list` shows domain counts; `list DOMAINE` gives a short index. `show ID` returns one entry from [references/catalogue.json](references/catalogue.json). The catalogue has 112 procedures plus three explicitly excluded starter proposals. Procedures may reuse an installed script, guard, skill or connected tool; they are not 112 independent programs. Replace uppercase command placeholders with actual, safely quoted arguments; never evaluate a template as shell code. Missing prerequisites or unavailable tools remain blockers, not successful runs.
 
 Use the installed guards rather than rebuilding their shell commands:
 
@@ -88,6 +112,8 @@ rtk proxy atelier-routines snapshot --project /absolute/project
 For music, `show audio.feedback` and `show audio.freeze` separate the audible target from technical evidence. Preserve approved material. Musical acceptance requires Guillaume's listening feedback.
 
 This catalogue does not change project instructions, service ownership, required CI, resource limits or authorization for publishing. Add a procedure after demonstrated reuse, with its canonical command, inputs and honest validation boundary; keep task history outside this entry point.
+
+Usage collection is local and descriptive, with no model. `rtk proxy atelier-routines usage --limit 3` reports repetitions, branches and real Codex token counters by turn and LLM step; it does not run a routine. Changed hooks need review in `/hooks`. Numeric events are read incrementally from the local Codex journal; messages, tool bodies and reasoning text are not saved. Cache is part of input, reasoning is part of output: never add them twice. Tool batches share one inference's tokens; aggregate or unassigned intervals and missing counters remain explicit. Rankings use uncached input plus output, not monetary costs. SQLite is capped at 64 MiB; no automatic purge, export or monitoring daemon. Repetitions alone do not justify reuse or a neural model. `ATELIER_ROUTINES_USAGE=off` disables writes for that process.
 
 Agent recipes: register an immutable bounded definition with `routines.register`, then call its `custom.NAME` ID. Use `routines.list` and `routines.manage` for inspection/enable/disable. Only allowed inspections can be composed; never submit shell code.
 

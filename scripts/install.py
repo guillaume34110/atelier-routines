@@ -44,6 +44,7 @@ def install_hooks(directory, python, rtk):
     roots = entry.get('env', {}).get('ATELIER_ROUTINES_ROOTS', json.dumps([str(Path(__file__).resolve().parents[2])]))
     routing = hook_command(hook_dir, 'routing_hook.py', python, rtk, [roots])
     waiting = hook_command(hook_dir, 'wait_hook.py', python, rtk, [roots])
+    collecting = hook_command(hook_dir, 'usage.py', python, rtk, ['--hook', roots])
     hooks = data.setdefault('hooks', {})
     waits = r'^(Bash|exec_command|wait|functions\.wait|mcp__atelier[-_]vps__vps_wait|mcp__atelier[-_]routines__routines_run)$'
     for event, matcher, handler, label in [('SessionStart', '^(startup|resume|clear|compact|fork)$', command, ''),
@@ -51,7 +52,12 @@ def install_hooks(directory, python, rtk):
                                     ('UserPromptSubmit', '', routing, ''), ('SubagentStart', '', routing, ''),
                                     ('PreToolUse', '^(Bash|exec_command)$', routing, ''),
                                     ('PreToolUse', waits, waiting, ' attente longue'),
-                                    ('PostToolUse', '^(Bash|exec_command|write_stdin|functions\\.(exec_command|write_stdin)|mcp__atelier[-_]routines__routines_run|mcp__atelier[-_]vps__vps_(run|wait))$', waiting, ' attente longue')]:
+                                    ('PostToolUse', '^(Bash|exec_command|write_stdin|functions\\.(exec_command|write_stdin)|mcp__atelier[-_]routines__routines_run|mcp__atelier[-_]vps__vps_(run|wait))$', waiting, ' attente longue'),
+                                    ('UserPromptSubmit', '', collecting, ' collecte'),
+                                    ('PreToolUse', '.*', collecting, ' collecte'),
+                                    ('PostToolUse', '.*', collecting, ' collecte'),
+                                    ('Stop', '', collecting, ' collecte'),
+                                    ('Interrupt', '', collecting, ' collecte')]:
         message = f'Atelier routines: {event}{label}'
         groups = hooks.setdefault(event, [])
         owned = [group for group in groups if len(group.get('hooks', [])) == 1
@@ -60,7 +66,7 @@ def install_hooks(directory, python, rtk):
         for group in owned:
             groups.remove(group)
         groups.append({'matcher': matcher, 'hooks': [{'type': 'command', 'command': handler,
-                       'timeout': 960 if event == 'PreToolUse' and label else 5,
+                       'timeout': 960 if event == 'PreToolUse' and label == ' attente longue' else 5,
                        'additionalContextLimit': 220, 'statusMessage': message}]})
     updated = (json.dumps(data, ensure_ascii=False, indent=2) + '\n').encode()
     if updated == original:
