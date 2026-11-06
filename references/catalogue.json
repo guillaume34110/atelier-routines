@@ -1,5 +1,37 @@
 [
   {
+    "id":"decision.evaluate",
+    "kind":"command",
+    "command":"rtk proxy atelier-routines run decision.evaluate --params OBJET_JSON",
+    "description":"Décision locale d1-2B 16 bits sur Mac, choix/confiance compacts, sans action.",
+    "boundary":"Fichier JSON relatif, état ou state_file et image PNG ; confiance0,99 par défaut. Repli requis si insuffisante. Aucune commande du modèle exécutée.",
+    "triggers":["decision locale","d1","classer choisir","decision evaluate"]
+  },
+  {
+    "id":"decision.status",
+    "kind":"command",
+    "command":"rtk proxy atelier-routines run decision.status --params OBJET_JSON",
+    "description":"Santé du service d1 Metal déjà installé, sans charger de modèle.",
+    "boundary":"API privée localhost, aucune clé affichée, aucun service lancé.",
+    "triggers":["sante d1","decision status"]
+  },
+  {
+    "id":"decision.prepare-vps",
+    "kind":"command",
+    "command":"rtk proxy atelier-routines run decision.prepare-vps --params OBJET_JSON",
+    "description":"Préparer un paquet borné et les arguments du MCP Atelier VPS pour une décision d1.",
+    "boundary":"Aucun calcul soumis. Utiliser vps_task puis fetch ; poids/runtime conservés sur Préprod, CPU2/RAM10Gio. Entrée non sensible ; motifs de secrets reconnus refusés.",
+    "triggers":["decision vps","deporter d1","decision prepare vps"]
+  },
+  {
+    "id":"decision.result",
+    "kind":"command",
+    "command":"rtk proxy atelier-routines run decision.result --params OBJET_JSON",
+    "description":"Lire une décision VPS récupérée et vérifier sa correspondance au paquet d'entrée.",
+    "boundary":"Artefact JSON et request=input.json ; empreinte et questions vérifiées, seuil local0,99 par défaut. Ne soumet ni ne rejoue une tâche.",
+    "triggers":["decision result","resultat d1 vps"]
+  },
+  {
     "id": "project.tree",
     "kind": "command",
     "description": "Inventaire borné sans parcourir les dépendances et sorties.",
@@ -102,6 +134,22 @@
       "vps run",
       "déporter calcul"
     ]
+  },
+  {
+    "id": "github.context",
+    "kind": "procedure",
+    "description": "Résoudre le dépôt GitHub, son compte et ses droits sans basculer le compte global.",
+    "triggers": ["comptes github", "authentification github", "mauvais compte github", "identité github", "droits github"],
+    "steps": ["Utiliser guillaume34110 pour ses dépôts et guillaume-rebaze pour les siens ; vérifier le login réel et les droits. Les autres propriétaires exigent une association locale explicite."],
+    "boundary": "Aucun jeton dans les sorties ; aucun changement du compte global ; aucune autre identité essayée."
+  },
+  {
+    "id": "github.prs",
+    "kind": "procedure",
+    "description": "Lister les PR ouvertes du dépôt ou des deux comptes avec leurs identités respectives.",
+    "triggers": ["liste pull requests", "toutes les pr", "mes pull requests", "pr deux comptes"],
+    "steps": ["Résoudre le compte ; retourner une page bornée de PR, avec leur dépôt et leur compte. Signaler tout compte inaccessible."],
+    "boundary": "Lecture seule ; pagination explicite ; un compte manquant rend la vue multi-comptes partielle."
   },
   {
     "id": "git.status",
@@ -564,7 +612,7 @@
       "create pull request"
     ],
     "steps": [
-      "Lire les workflows, exécuter les checks obligatoires, pousser la branche de travail ; créer la PR et appeler attach_artifact avec son URL."
+      "Lire les workflows et valider la révision finale ; publier la branche avec son identité Git vérifiée. Appeler la routine avec branch, head_sha, title et éventuellement body_file ; elle retrouve ou crée la PR sans nouvelle poussée."
     ],
     "boundary": "CI locale bloquée = poussée bloquée ; titre [sc-ID] si applicable."
   },

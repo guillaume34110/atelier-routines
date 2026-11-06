@@ -243,6 +243,8 @@ def bridge(execution_id, mode):
     hashes = {}
     with core.directory_fd(artifacts, create=True) as directory:
         for relative in PATHS:
+            if relative.endswith('/benchmark.json') and not passed:
+                continue
             source = fetched / relative
             if not source.is_file() or source.stat().st_size > core.MAX_INPUT:
                 raise core.Refusal('Preuve attendue absente ou trop volumineuse : ' + relative, 'decision_required')
@@ -260,9 +262,9 @@ def bridge(execution_id, mode):
                 raise core.Refusal('Copie de preuve non vérifiée.', 'decision_required')
     current_source = source_signature(project, module)
     unchanged = current_source == record['source']
-    status = 'ok' if passed and unchanged else 'decision_required' if not unchanged else 'error'
+    status = 'error' if not passed else 'ok' if unchanged else 'decision_required'
     result = {'id': 'checks.regression', 'execution_id': execution_id, 'status': status,
-              'operation_state': 'completed', 'validation_status': 'passed' if passed and unchanged else 'stale' if not unchanged else 'failed',
+              'operation_state': 'completed', 'validation_status': 'failed' if not passed else 'passed' if unchanged else 'stale',
               'result': {'summary': {'tests': report['tests'], 'source_unchanged': unchanged, 'remote_job': record['remote_job']}},
               'artifacts': hashes, 'evidence': [], 'duration_ms': round((time.time() - record['created_at']) * 1000, 2)}
     with core.evidence_dir(project) as (destination, directory):

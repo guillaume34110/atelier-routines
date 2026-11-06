@@ -7,6 +7,9 @@ import subprocess
 import sys
 import tomllib
 
+import routines
+import usage
+
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
@@ -14,6 +17,8 @@ from mcp.client.stdio import stdio_client
 async def main():
     workspace = Path(os.environ['TASK_WORKSPACE'])
     project = Path(__file__).resolve().parents[1]
+    with usage.database() as database:
+        before_usage = database.execute('SELECT COALESCE(MAX(seq),0) FROM events').fetchone()[0]
     entry = tomllib.loads((Path.home() / '.codex/config.toml').read_text())['mcp_servers']['atelier-routines']
     parameters = StdioServerParameters(command=entry['command'], args=entry['args'], env=entry['env'])
     with (workspace / 'installed-server.log').open('w') as log:
@@ -45,11 +50,18 @@ async def main():
     assert proof['result']['summary'] == fallback_proof['result']['summary']
     legacy = subprocess.run([entry['command'], 'proxy', cli, 'list'], env=cli_env,
                             text=True, capture_output=True, timeout=15)
-    assert legacy.returncode == 0 and '109 routines' in legacy.stdout
+    count = sum(entry['kind'] != 'proposal' for entry in json.loads(routines.CATALOGUE.read_text()))
+    assert legacy.returncode == 0 and f'{count} routines' in legacy.stdout
+    with usage.database() as database:
+        captured = [(source, json.loads(data).get('execution_id')) for source, data in database.execute(
+                    "SELECT source,data FROM events WHERE seq>? AND phase='end'", (before_usage,))]
+    assert ('mcp', body['execution_id']) in captured, 'Installed MCP did not persist its result'
+    assert ('cli', other['execution_id']) in captured, 'Installed CLI did not persist its result'
     report = {'passed': True, 'server': initialized.serverInfo.name,
               'protocol': initialized.protocolVersion, 'tools': names,
               'search': 'passed', 'execution': body['status'], 'invalid_id_and_path': 'refused',
               'cli_run_matches_mcp': True, 'installed_cli_alias': 'passed', 'legacy_cli_list': 'passed',
+              'usage_capture': {'mcp': True, 'cli': True},
               'evidence': body['evidence'] + other['evidence']}
     (workspace / 'installed.json').write_text(json.dumps(report, indent=2))
     print(json.dumps(report))

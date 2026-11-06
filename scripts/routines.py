@@ -12,7 +12,7 @@ import sys
 import unicodedata
 from pathlib import Path
 
-VERSION = '1.2.2'
+VERSION = '1.2.3'
 CATALOGUE = Path(__file__).resolve().parents[1] / 'references/catalogue.json'
 BIN = Path.home() / '.local/bin'
 
@@ -146,7 +146,7 @@ def self_test():
     emit('Self-check : arguments littéraux, gardes, plafonds et catalogue OK ; aucun job lancé.')
 
 
-def main(argv=None):
+def _main(argv=None, observation=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     tail = []
     if '--' in argv:
@@ -154,7 +154,7 @@ def main(argv=None):
         argv, tail = argv[:split], argv[split + 1:]
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version', action='version', version='atelier-routines ' + VERSION)
-    parser.add_argument('action', choices=['match', 'list', 'show', 'context', 'tree', 'outline', 'preflight', 'storage', 'budget', 'snapshot', 'self-test', 'find', 'run'])
+    parser.add_argument('action', choices=['match', 'list', 'show', 'context', 'tree', 'outline', 'preflight', 'storage', 'budget', 'snapshot', 'self-test', 'find', 'run', 'usage'])
     parser.add_argument('query', nargs='?', default='')
     parser.add_argument('--project', default='.')
     parser.add_argument('--gib', type=float)
@@ -168,6 +168,12 @@ def main(argv=None):
             raise ValueError('--params est réservé à run.')
         if args.request_id and args.action != 'run':
             raise ValueError('--request-id est réservé à run.')
+        if args.action == 'usage':
+            if args.query or tail or args.file or args.gib is not None or args.project != '.':
+                raise ValueError('usage accepte uniquement --limit.')
+            import usage
+            print(json.dumps(usage.report(args.limit), ensure_ascii=False))
+            return 0
         if args.action in ('find', 'run'):
             if tail or args.file or args.gib is not None or args.project != '.':
                 raise ValueError('find/run utilisent uniquement la requête, --limit ou --params.')
@@ -181,6 +187,8 @@ def main(argv=None):
                     result = asyncio.run(executions.dispatch(args.query, json.loads(args.params or '{}'), allow_background=False, request_id=args.request_id))
             except executor.Refusal as error:
                 result = {'status': error.status, 'message': str(error)}
+            if observation is not None:
+                observation.update(result)
             print(json.dumps(result, ensure_ascii=False))
             return 0 if result.get('status', 'ok') == 'ok' else 2
         if args.query and args.action not in ('match', 'list', 'show'):
@@ -237,6 +245,18 @@ def main(argv=None):
     except (ValueError, OSError, SyntaxError, subprocess.TimeoutExpired) as error:
         emit(f'Erreur : {error}')
         return 2
+
+
+def main(argv=None):
+    import usage
+    values = list(sys.argv[1:] if argv is None else argv)
+    if values[:1] == ['usage']:
+        return _main(values)
+    action = values[1] if values[:1] == ['run'] and len(values) > 1 else 'cli.' + (values[0] if values else 'unknown')
+    with usage.capture('cli', action, {'argv': values}) as observation:
+        code = _main(values, observation)
+        observation.setdefault('status', 'ok' if code == 0 else 'error')
+        return code
 
 
 if __name__ == '__main__':

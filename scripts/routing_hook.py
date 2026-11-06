@@ -4,8 +4,12 @@ from pathlib import Path
 import shlex
 import sys
 
-PRIORITY = ('Chaque étape couverte, même ponctuelle : atelier-routines d’abord, pour le parent et les sous-agents. '
+PRIORITY = ('Décision fermée éligible : d1 local en premier via decision.evaluate, avant Sol ; '
+            'repli Sol seulement si usable=false ou service indisponible. Choix/triage/image ; aucune action autorisée par le modèle. '
+            'Règle déterministe ou attente connue : pas de modèle. '
+            'Chaque étape couverte, même ponctuelle : atelier-routines d’abord, pour le parent et les sous-agents. '
             'IDs connus : git.status/diff/staged/log/branches, project.manifest/tree/search, files.logs/json/csv. '
+            'GitHub : github.context choisit guillaume34110 ou guillaume-rebaze selon le dépôt ; jamais de bascule globale. '
             'Appeler routines_run directement ; sinon une seule routines_find. CLI seulement si MCP indisponible. '
             'Lecture exacte pour éditer ou opération hors couverture : outils directs. Une simple question ne lance rien.')
 
@@ -28,7 +32,7 @@ def route(words, cwd, roots):
                 break
     if not project.is_dir() or not any(project.is_relative_to(root) for root in roots):
         return None
-    if command == 'git':
+    if command in ('git', 'gh'):
         for parent in (project, *project.parents):
             if not any(parent.is_relative_to(root) for root in roots):
                 break
@@ -36,6 +40,11 @@ def route(words, cwd, roots):
                 project = parent
                 break
     params = {'project': str(project)}
+    if command == 'gh':
+        if args == ['auth', 'status']:
+            return 'github.context', params
+        if args == ['pr', 'list']:
+            return 'github.prs', params
     if command == 'git' and args:
         verb, flags = args[0], args[1:]
         if verb == 'status' and all(f in {'-s', '-b', '-sb', '--short', '--branch', '--porcelain', '--porcelain=v1'} for f in flags):
@@ -44,6 +53,8 @@ def route(words, cwd, roots):
             return 'git.branches', params
         if verb == 'branch' and flags == ['--show-current']:
             return 'git.status', params
+        if verb == 'remote' and flags == ['-v']:
+            return 'git.remote', params
         summaries = {'--stat', '--numstat', '--shortstat', '--name-only', '--name-status'}
         if verb == 'diff' and summaries.intersection(flags) and set(flags) <= summaries | {
                 '--cached', '--staged', '--no-ext-diff', '--no-textconv', '--no-color'}:

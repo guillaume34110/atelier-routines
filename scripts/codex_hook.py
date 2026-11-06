@@ -3,7 +3,9 @@ import json
 import re
 import sys
 
-RULES = ('Atelier routines: identifiant connu → routines_run; sinon une seule routines_find. '
+RULES = ('Décision fermée éligible : decision.evaluate (d1 local) avant Sol ; repli si usable=false ou indisponible. '
+         'Règles déterministes, gardes et attentes sans modèle. '
+         'Atelier routines: identifiant connu → routines_run; sinon une seule routines_find. '
          'CLI seulement si MCP indisponible. Une question seule ne lance aucune action. '
          'Conserver execution_id/request_id; inspecter ou reprendre la référence connue sans resoumettre. '
          'running/guided/unavailable/partial/error/timeout/decision_required/abandoned ne valident rien. '

@@ -1,0 +1,13 @@
+{
+  "state": "Le build vient d'échouer. Le journal n'a pas encore été inspecté.",
+  "questions": {
+    "next": {
+      "type": "choice",
+      "instructions": "Quelle inspection est utile maintenant ?",
+      "criteria": {
+        "logs": "Lire le journal du build en échec",
+        "rerun": "Relancer immédiatement le même build"
+      }
+    }
+  }
+}
