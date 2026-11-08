@@ -62,6 +62,15 @@ SEARCH = schema(pattern={'type': 'string', 'minLength': 1, 'maxLength': 200,
 SCHEMAS = {
     'system.context': schema(), 'project.manifest': schema(), 'project.tree': schema(),
     'project.outline': schema(file=FILE), 'project.search': SEARCH, 'project.symbol': SEARCH,
+    'code.index': schema(), 'code.find': schema(pattern={'type': 'string', 'minLength': 2, 'maxLength': 120}),
+    'knowledge.record': schema(topic={'type': 'string', 'minLength': 1, 'maxLength': 80},
+                               question={'type': 'string', 'minLength': 1, 'maxLength': 300},
+                               conditions={'type': 'string', 'minLength': 1, 'maxLength': 500},
+                               finding={'type': 'string', 'minLength': 1, 'maxLength': 500},
+                               reported_result={'type': 'string', 'enum': ['failed', 'inconclusive', 'promising', 'worked', 'invalidated']},
+                               evidence_file={'type': 'string', 'maxLength': 1024, 'default': ''},
+                               supersedes={'type': 'string', 'maxLength': 64, 'default': ''}),
+    'knowledge.find': schema(query={'type': 'string', 'minLength': 2, 'maxLength': 120}),
     'git.status': schema(), 'git.diff': schema(), 'git.staged': schema(),
     'files.json': schema(file=FILE), 'files.logs': schema(file=FILE),
     'files.csv': schema(file=FILE, delimiter={'type': 'string', 'enum': [',', ';', '\t', '|'],
@@ -150,7 +159,7 @@ def availability(entry):
         required.append('git')
     if entry['id'] in GITHUB_SCHEMAS:
         required.extend(('git', 'gh'))
-    if entry['id'] in ('project.tree', 'project.search', 'project.symbol'):
+    if entry['id'] in ('project.tree', 'project.search', 'project.symbol', 'code.find'):
         required.append('rg')
     if entry['id'] == 'system.processes':
         required.append('ps')
@@ -680,6 +689,12 @@ def extra_execute(identifier, project, params):
 
 def execute(identifier, params, runtime=None):
     project = project_path(params['project'])
+    if identifier in ('code.index', 'code.find'):
+        import code_index
+        return code_index.execute(identifier, params)
+    if identifier in ('knowledge.record', 'knowledge.find'):
+        import knowledge
+        return knowledge.execute(identifier, project, params)
     if identifier.startswith('decision.'):
         import decision
         value = decision.execute(identifier,project,params)
@@ -982,6 +997,8 @@ def run(identifier, params, resume_id=None, wait_seconds=0, reconcile=False):
         timeout = float(os.environ.get('ATELIER_ROUTINES_TIMEOUT', '15'))
         if not 0 < timeout <= 30:
             raise Refusal('Le délai configuré doit être >0 et ≤30 secondes.')
+        if identifier in ('code.index', 'code.find'):
+            timeout = 180
         payload = params
         if identifier in GITHUB_SCHEMAS:
             timeout = max(90, params.get('wait', 0) + 90, wait_seconds + 90)

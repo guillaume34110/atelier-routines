@@ -1,4 +1,6 @@
 import json
+from contextlib import redirect_stdout
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -8,6 +10,7 @@ import unittest
 from unittest.mock import patch
 
 import usage
+import routines
 
 
 class TokenUsageTest(unittest.TestCase):
@@ -23,6 +26,29 @@ class TokenUsageTest(unittest.TestCase):
             'ATELIER_ROUTINES_USAGE': 'on', 'CODEX_HOME': str(self.home), 'CODEX_THREAD_ID': ''})
         environment.start()
         self.addCleanup(environment.stop)
+
+    def test_daily_usage_filters_dates_and_reports_rotated_coverage(self):
+        with usage.database() as database:
+            for seq, day, counts in ((2, 7, (100, 80, 5)), (3, 8, (200, 150, 10))):
+                database.execute('''INSERT INTO events(seq,at,source,phase,operation,data)
+                    VALUES (?,?,?,?,?,?)''', (seq, usage.datetime(2026, 11, day, 12).astimezone().timestamp(),
+                    'codex', 'tokens', 'exec', json.dumps({'reported_usage': dict(zip(
+                        ('input_tokens', 'cached_input_tokens', 'output_tokens'), counts))})))
+            database.commit()
+        result = usage.daily_report('2026-11-08')
+        self.assertEqual(result['state'], 'observed')
+        self.assertEqual(result['tokens']['uncached_input_tokens'], 50)
+        self.assertEqual(result['tokens']['steps'], 1)
+        out = io.StringIO()
+        with redirect_stdout(out):
+            self.assertEqual(routines.main(['usage', '--date', '2026-11-08']), 0)
+        self.assertEqual(json.loads(out.getvalue())['synchronization'], 'not_requested')
+        with usage.database() as database:
+            database.execute('DELETE FROM events WHERE seq=2')
+            database.commit()
+        self.assertEqual(usage.daily_report('2026-11-08')['state'], 'partial')
+        with self.assertRaisesRegex(ValueError, 'date valide'):
+            usage.daily_report('2026-02-30')
 
     def event(self, category, payload):
         return {'timestamp': '2026-10-31T10:00:00Z', 'type': category, 'payload': payload}
@@ -69,6 +95,18 @@ class TokenUsageTest(unittest.TestCase):
         for value in (b'private-session', b'private-turn', b'private-call', b'private-canary', b'private-reasoning-canary',
                       b'private-arguments-canary', b'private-command-canary', b'private-message-canary'):
             self.assertNotIn(value, content)
+
+    def test_token_collection_rotates_oldest_steps_without_losing_new_counts(self):
+        samples = [self.tokens(self.counts(10 * (i + 1), 0, i + 1), self.counts(10, 0, 1)) for i in range(500)]
+        self.append(*self.header(), *samples)
+        with patch.object(usage, 'CAP_BYTES', 65536):
+            self.assertEqual(usage.collect_tokens(self.path)['new_steps'], 500)
+            result = usage.report()
+        self.assertTrue(result['history_rotated'])
+        self.assertEqual(result['tokens']['state'], 'partial')
+        self.assertEqual(result['tokens']['coverage'], 'retained_window_only')
+        self.assertLess(result['tokens']['totals']['total_tokens'], 5500)
+        self.assertLessEqual((usage.root() / 'events.sqlite3').stat().st_size, 65536)
 
     def test_incremental_partial_line_and_exact_task_assignment(self):
         first = self.counts(100, 80, 20, 10)

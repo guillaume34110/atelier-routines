@@ -161,6 +161,7 @@ def _main(argv=None, observation=None):
     parser.add_argument('--file')
     parser.add_argument('--params', help='Objet JSON pour run ; aucun shell évalué.')
     parser.add_argument('--limit', type=int, default=3)
+    parser.add_argument('--date', help='Journée locale YYYY-MM-DD pour usage, sans synchronisation du journal Codex.')
     parser.add_argument('--request-id', help='Clé stable de demande pour retrouver une exécution interrompue.')
     args = parser.parse_args(argv)
     try:
@@ -170,10 +171,12 @@ def _main(argv=None, observation=None):
             raise ValueError('--request-id est réservé à run.')
         if args.action == 'usage':
             if args.query or tail or args.file or args.gib is not None or args.project != '.':
-                raise ValueError('usage accepte uniquement --limit.')
+                raise ValueError('usage accepte uniquement --limit et --date.')
             import usage
-            print(json.dumps(usage.report(args.limit), ensure_ascii=False))
+            print(json.dumps(usage.daily_report(args.date) if args.date else usage.report(args.limit), ensure_ascii=False))
             return 0
+        if args.date is not None:
+            raise ValueError('--date est réservé à usage.')
         if args.action in ('find', 'run'):
             if tail or args.file or args.gib is not None or args.project != '.':
                 raise ValueError('find/run utilisent uniquement la requête, --limit ou --params.')

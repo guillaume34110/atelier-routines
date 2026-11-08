@@ -39,7 +39,7 @@ Version **1.2.3** : `rtk proxy atelier-routines --version`. La CLI, l’initiali
 
 Serveur MCP local en Python pour les étapes mécaniques : inspections, recettes déclaratives, suivi durable et collecte vérifiée. Deux outils seulement, `routines_find` et `routines_run` ; les descriptions du catalogue ne sont pas chargées dans leurs définitions.
 
-Le catalogue contient116 procédures et trois propositions exclues.50 opérations sont implémentées ; les autres restent `guided`, avec leurs prérequis. Une opération peut être `unavailable` si son client, son format ou son environnement manque.
+Le catalogue contient120 procédures et trois propositions exclues.54 opérations sont implémentées ; les autres restent `guided`, avec leurs prérequis. Une opération peut être `unavailable` si son client, son format ou son environnement manque.
 
 ## Utilisation
 
@@ -136,7 +136,7 @@ rtk proxy uv pip install --python .venv/bin/python --require-hashes -r requireme
 rtk proxy .venv/bin/python scripts/install.py
 ```
 
-`--replace` met à jour cette installation reconnue uniquement. L’installateur conserve les autres réglages et secrets de la configuration personnelle, vérifie le TOML et installe un point d’entrée de skill détectable. Les modifications locales du skill sont préservées. Le transport est stdio ; le délai d’outil couvre l’attente VPS. Voir la [configuration MCP officielle](https://learn.chatgpt.com/docs/extend/mcp?surface=cli). Recharger les connexions ou ouvrir un nouveau chat après installation.
+Passer `--root /chemin/du/code` plusieurs fois pour couvrir plusieurs dossiers de projets ; sans cette option, la racine est le dossier parent du dépôt. `--replace` met à jour cette installation reconnue uniquement. L’installateur conserve les autres réglages et secrets de la configuration personnelle, vérifie le TOML et installe un point d’entrée de skill détectable. Les modifications locales du skill sont préservées. Le transport est stdio ; le délai d’outil couvre l’attente VPS. Voir la [configuration MCP officielle](https://learn.chatgpt.com/docs/extend/mcp?surface=cli). Recharger les connexions ou ouvrir un nouveau chat après installation.
 
 Les hooks utilisateur rappellent la priorité MCP au démarrage, à chaque demande et au démarrage d’un sous-agent. `PreToolUse` redirige les inspections shell simples couvertes : statut Git, résumés de diff, branches locales, historique court, inventaire et recherche littérale avec `rg -F`. La commande équivalente est refusée avant exécution avec l’identifiant à appeler ; le hook ne lance pas la routine. `PostToolUse` rappelle les limites d’un retour incomplet ou ancien. Les lectures exactes de source/patch pour éditer, les mutations Git, les recherches regex et les programmes shell complexes restent directs ; ce routeur ciblé ne prétend pas contrôler tout programme arbitraire.
 
@@ -154,6 +154,14 @@ rtk proxy python scripts/routines.py run git.status --params '{"project":"/absol
 ```
 
 Les anciennes commandes `match`, `list`, `show`, `context`, `tree`, `outline` et les gardes restent disponibles. `run` sort avec 0 uniquement pour `ok` ; les résultats partiels, guidés, incertains ou échoués ne passent pas pour une validation.
+
+`code.find` crée ou rafraîchit à la première recherche l'annuaire privé `atelier-routines-code` pour chaque utilisateur ; `code.index` force son rafraîchissement. Il référence les fichiers source et les déclarations repérées sous les racines autorisées, sans copier le contenu des sources ni modifier les sources scannées. Les chemins protégés, liens, dépendances et `CLAUDE.md` sont exclus. Les résultats portent une empreinte de version et `qa=not_assessed` : les tests et droits de réutilisation doivent être vérifiés pour le projet cible. Les langues hors extensions reconnues et les sources de plus de 2 Mio n'ont pas de recherche de contenu complète.
+
+### Savoir de R&D entre projets
+
+Avant une nouvelle recherche, `knowledge.find` retrouve par thème les conclusions consignées dans les projets autorisés. Après une expérience, `knowledge.record` conserve le thème, la question, les conditions d'application, la conclusion et le résultat **déclaré** (`failed`, `inconclusive`, `promising`, `worked` ou `invalidated`). `evidence_file` peut désigner un petit rapport local relatif au projet ; seul son chemin et son SHA256 sont conservés. Une recherche recontrôle l'empreinte et indique `evidence_current=false` si la preuve a changé ou disparu. `supersedes` relie une correction à l'identifiant précédent et retire l'ancienne conclusion des recherches ordinaires. Deux enregistrements identiques sont idempotents.
+
+Le registre reste privé et propre à chaque utilisateur, sous les racines qu'il a configurées ; il ne copie ni données, ni poids, ni journaux. Les anciennes R&D ne peuvent pas être reconstituées automatiquement avec fiabilité : les consigner après examen de leurs preuves. Une fiche sans `evidence_file` est une piste non vérifiée. Pour le machine learning, noter dans les conditions les versions de données, le découpage validation/test, le modèle, les ressources et le critère d'arrêt ; rechercher les échecs antérieurs avant de décider d'un lot d'entraînement cohérent. Le registre n'autorise aucun entraînement et ne garantit pas qu'un essai unique suffira.
 
 ## Vérification
 
@@ -174,6 +182,7 @@ La phrase conservée est filtrée puis limitée à 280 caractères. Les paramèt
 ```sh
 rtk proxy atelier-routines usage
 rtk proxy atelier-routines usage --limit 10
+rtk proxy atelier-routines usage --date 2026-11-08
 ```
 
 Le bilan distingue les sources, les fins d’outils observées, les débuts sans fin, les paramètres répétés dans un tour, les séquences récurrentes et les embranchements. L’analyse des séquences porte sur les 2 000 dernières fins d’outils des hooks et signale sa troncature. MCP, CLI et hooks peuvent observer le même appel : ne pas additionner leurs compteurs comme des actions indépendantes. Un tour de demande n’est pas forcément une tâche métier complète ; sans identifiant de session/appel exposé, la corrélation reste absente. `write_stdin` n’est pas garanti dans `PreToolUse`.

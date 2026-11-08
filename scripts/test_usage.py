@@ -101,15 +101,18 @@ class UsageTest(unittest.TestCase):
         self.assertEqual(result['tokens']['state'], 'unavailable')
         self.assertEqual(result['repeat_inputs_in_turn'], 1)
 
-    def test_quota_preserves_existing_records_and_capture_errors_do_not_mask_results(self):
+    def test_quota_rotates_oldest_records_and_capture_errors_do_not_mask_results(self):
         usage.record('cli', 'end', 'first', result={'status': 'ok'})
         errors = io.StringIO()
-        with patch.object(usage, 'CAP_BYTES', 32768), redirect_stderr(errors):
-            for i in range(100):
+        with patch.object(usage, 'CAP_BYTES', 65536), redirect_stderr(errors):
+            for i in range(500):
                 usage.record('cli', 'end', 'other', prompt='x' * 280, inputs={'i': i})
-        self.assertIn('collecte indisponible', errors.getvalue())
-        self.assertEqual(self.events()[0][2], 'first')
-        self.assertLessEqual((usage.root() / 'events.sqlite3').stat().st_size, 32768)
+            usage.record('cli', 'end', 'latest', result={'status': 'ok'})
+        self.assertEqual(errors.getvalue(), '')
+        self.assertEqual(self.events()[-1][2], 'latest')
+        self.assertNotIn('first', [row[2] for row in self.events()])
+        self.assertTrue(usage.report()['history_rotated'])
+        self.assertLessEqual((usage.root() / 'events.sqlite3').stat().st_size, 65536)
         with patch.object(usage, 'database', side_effect=OSError('canary')), redirect_stderr(io.StringIO()):
             with usage.capture('cli', 'test', {}) as observed:
                 observed['status'] = 'ok'

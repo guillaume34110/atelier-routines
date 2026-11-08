@@ -13,7 +13,7 @@ class InstallTest(unittest.TestCase):
     def test_keeps_installed_command_directories(self):
         with tempfile.TemporaryDirectory(dir=os.environ['TASK_WORKSPACE']) as tmp:
             with patch('install.shutil.which', side_effect={'rg': '/search/bin/rg', 'git': '/git/bin/git'}.get):
-                entry = install.configure(Path(tmp) / 'config.toml', '/python', Path(tmp), '/rtk/bin/rtk')
+                entry = install.configure(Path(tmp) / 'config.toml', '/python', [Path(tmp)], '/rtk/bin/rtk')
             paths = entry['env']['PATH'].split(os.pathsep)
             self.assertIn('/search/bin', paths)
             self.assertIn('/git/bin', paths)
@@ -24,15 +24,15 @@ class InstallTest(unittest.TestCase):
             previous = '# keep comments\nmodel = "existing"\n[mcp_servers.other]\ncommand = "other"\n[mcp_servers.other.env]\nPRIVATE = "synthetic-test-value"\n'
             config.write_text(previous)
             expected = tomllib.loads(previous)
-            entry = install.configure(config, '/runtime with spaces/python', Path(tmp), '/usr/bin/rtk')
+            entry = install.configure(config, '/runtime with spaces/python', [Path(tmp)], '/usr/bin/rtk')
             self.assertTrue(config.read_text().startswith(previous))
             parsed = tomllib.loads(config.read_text())
             self.assertEqual(parsed['mcp_servers'].pop('atelier-routines'), entry)
             self.assertEqual(parsed, expected)
             installed = config.read_bytes()
-            install.configure(config, '/runtime with spaces/python', Path(tmp), '/usr/bin/rtk')
+            install.configure(config, '/runtime with spaces/python', [Path(tmp)], '/usr/bin/rtk')
             self.assertEqual(config.read_bytes(), installed)
-            updated = install.configure(config, '/updated/python', Path(tmp), '/usr/bin/rtk', replace=True)
+            updated = install.configure(config, '/updated/python', [Path(tmp)], '/usr/bin/rtk', replace=True)
             self.assertEqual(updated['args'][1], '/updated/python')
             parsed = tomllib.loads(config.read_text())
             parsed['mcp_servers'].pop('atelier-routines')
@@ -40,7 +40,7 @@ class InstallTest(unittest.TestCase):
             installed = config.read_bytes()
             self.assertEqual(config.stat().st_mode & 0o777, 0o600)
             with self.assertRaises(ValueError):
-                install.configure(config, '/different/python', Path(tmp), '/usr/bin/rtk')
+                install.configure(config, '/different/python', [Path(tmp)], '/usr/bin/rtk')
             self.assertEqual(config.read_bytes(), installed)
 
     def test_refuses_symbolic_config(self):
@@ -50,8 +50,16 @@ class InstallTest(unittest.TestCase):
             link = Path(tmp) / 'link.toml'
             link.symlink_to(source)
             with self.assertRaises(ValueError):
-                install.configure(link, '/python', Path(tmp), '/rtk')
+                install.configure(link, '/python', [Path(tmp)], '/rtk')
             self.assertEqual(source.read_text(), '# original\n')
+
+    def test_multiple_user_roots_are_kept_in_config(self):
+        with tempfile.TemporaryDirectory(dir=os.environ['TASK_WORKSPACE']) as tmp:
+            first, second = Path(tmp) / 'code', Path(tmp) / 'other'
+            first.mkdir()
+            second.mkdir()
+            entry = install.configure(Path(tmp) / 'config.toml', '/python', [first, second], '/rtk')
+            self.assertEqual(json.loads(entry['env']['ATELIER_ROUTINES_ROOTS']), [str(first), str(second)])
 
     def test_skill_is_discoverable_and_preserves_local_edits(self):
         with tempfile.TemporaryDirectory(dir=os.environ['TASK_WORKSPACE']) as tmp:
