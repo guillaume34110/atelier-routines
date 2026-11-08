@@ -113,9 +113,11 @@ def install_skill(source, directory):
     metadata.chmod(0o600)
 
 
-def configure(config, python, root, rtk, replace=False):
+def configure(config, python, roots, rtk, replace=False):
     if config.is_symlink():
         raise ValueError('Configuration symbolique : modifier sa source explicitement.')
+    if not roots or any(not root.is_absolute() or not root.is_dir() or root.resolve() == Path('/') for root in roots):
+        raise ValueError('Fournir des racines de code absolues et existantes, hors /.')
     original = config.read_bytes() if config.exists() else b''
     before = tomllib.loads(original.decode())
     tools = [rtk, *(path for name in ('rg', 'git') if (path := shutil.which(name)))]
@@ -123,7 +125,7 @@ def configure(config, python, root, rtk, replace=False):
     entry = {'command': str(rtk),
              'args': ['proxy', str(python), str(Path(__file__).resolve().with_name('mcp_server.py'))],
              'startup_timeout_sec': 20, 'tool_timeout_sec': 3700,
-             'env': {'ATELIER_ROUTINES_ROOTS': json.dumps([str(root)]),
+             'env': {'ATELIER_ROUTINES_ROOTS': json.dumps([str(root.resolve()) for root in roots]),
                      'PYTHONDONTWRITEBYTECODE': '1', 'PATH': os.pathsep.join(paths)}}
     existing = before.get('mcp_servers', {}).get('atelier-routines')
     if existing is not None:
@@ -176,6 +178,8 @@ def configure(config, python, root, rtk, replace=False):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--replace', action='store_true', help='Mettre à jour cette installation reconnue uniquement.')
+    parser.add_argument('--root', action='append', type=Path,
+                        help='Racine de code autorisée ; répétable. Par défaut : dossier parent du dépôt.')
     args = parser.parse_args()
     version = importlib.metadata.version('mcp')
     if version != '1.30.0':
@@ -184,7 +188,7 @@ if __name__ == '__main__':
     if not rtk:
         raise SystemExit('rtk est requis.')
     configure(Path.home() / '.codex/config.toml', sys.executable,
-              Path(__file__).resolve().parents[2], rtk, replace=args.replace)
+              args.root or [Path(__file__).resolve().parents[2]], rtk, replace=args.replace)
     install_skill(Path(__file__).resolve().parents[1] / 'SKILL.md', Path.home() / '.codex/skills/atelier-routines')
     install_hooks(Path.home() / '.codex', sys.executable, rtk)
     print(f'atelier-routines {routines.VERSION} configuré en stdio ; skill et hooks installés, autres réglages conservés. Examiner les nouveaux hooks avec /hooks dans Codex.')

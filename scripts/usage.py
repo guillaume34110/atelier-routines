@@ -94,6 +94,21 @@ def database(create=True):
         connection.close()
 
 
+def reserve_space(connection, event_key=None):
+    page_size = connection.execute('PRAGMA page_size').fetchone()[0]
+    limit = CAP_BYTES // page_size
+    target = max(1, limit // 100)
+    while limit - connection.execute('PRAGMA page_count').fetchone()[0] + connection.execute('PRAGMA freelist_count').fetchone()[0] < target:
+        if event_key and connection.execute('SELECT 1 FROM events WHERE event_key=?', (event_key,)).fetchone():
+            return
+        event_key = None
+        rows = connection.execute('SELECT seq FROM events ORDER BY seq LIMIT 1025').fetchall()
+        if len(rows) < 2:
+            raise ValueError('Usage journal cannot rotate without losing its last event')
+        # Reuse SQLite pages in oldest-first batches, keeping at least one event and its sequence.
+        connection.execute('DELETE FROM events WHERE seq <= ?', (rows[min(1024, len(rows) - 1) - 1][0],))
+
+
 def encoded(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, allow_nan=False).encode()
 
@@ -172,6 +187,7 @@ def record(source, phase, operation, inputs=None, result=None, session=None, cal
                 data['reported_usage'] = {k: usage[k] for k in ('input_tokens', 'output_tokens', 'total_tokens') if type(usage.get(k)) is int and usage[k] >= 0}
             status = data.get('status', 'error' if body.get('isError') is True else None)
             event_key = digest(connection, [source, phase, call_id]) if call_id else None
+            reserve_space(connection, event_key)
             connection.execute('INSERT OR IGNORE INTO events(at,source,phase,session,turn,call_id,operation,signature,status,data,event_key) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
                                (time.time(), source, phase, session, turn, call_id, name(operation), digest(connection, inputs), status, encoded(data).decode(), event_key))
     except (OSError, ValueError, TypeError, sqlite3.Error):
@@ -204,6 +220,7 @@ def token_schema(connection):
     if version is None:
         with connection:
             connection.execute('BEGIN IMMEDIATE')
+            reserve_space(connection)
             connection.execute('''CREATE TABLE IF NOT EXISTS token_cursors (
                 source TEXT PRIMARY KEY, identity TEXT NOT NULL, offset INTEGER NOT NULL,
                 size INTEGER NOT NULL, state TEXT NOT NULL, status TEXT NOT NULL, updated_at REAL NOT NULL)''')
@@ -254,10 +271,12 @@ def token_counts(value):
 
 
 def token_event(connection, phase, state, data, stamp, key, label='unknown'):
-    connection.execute('''INSERT OR IGNORE INTO events
+    event_key = digest(connection, ['codex', key])
+    reserve_space(connection, event_key)
+    return connection.execute('''INSERT OR IGNORE INTO events
         (at,source,phase,session,turn,operation,status,data,event_key) VALUES (?,?,?,?,?,?,?,?,?)''',
         (stamp, 'codex', phase, state.get('session'), state.get('turn'), label, 'measured',
-         encoded(data).decode(), digest(connection, ['codex', key])))
+         encoded(data).decode(), event_key)).rowcount
 
 
 def collect_tokens(path):
@@ -373,10 +392,8 @@ def collect_tokens(path):
                                     'attribution': attribution, 'operations': labels,
                                     'call_ids': [item['call_id'] for item in pending], 'tool_calls': count,
                                     'tools_truncated': count > len(pending), 'source': source, 'offset': position}
-                            before = connection.total_changes
-                            token_event(connection, 'tokens', {**state, 'turn': owner}, data, stamp,
-                                        [state.get('session'), owner, current], label)
-                            added += connection.total_changes - before
+                            added += token_event(connection, 'tokens', {**state, 'turn': owner}, data, stamp,
+                                                 [state.get('session'), owner, current], label)
                             state.update(previous=current, previous_turn=state.get('turn'), pending=[], pending_count=0)
                     except (ValueError, TypeError, KeyError, AttributeError):
                         state['gaps'] = state.get('gaps', 0) + 1
@@ -385,6 +402,7 @@ def collect_tokens(path):
                 stream.seek(0)
                 prefix = stream.read(min(1024, info.st_size))
                 state['prefix'] = [len(prefix), hashlib.sha256(prefix).hexdigest()]
+                reserve_space(connection)
                 connection.execute('INSERT OR REPLACE INTO token_cursors VALUES (?,?,?,?,?,?,?)',
                     (source, identity, position, info.st_size, encoded(state).decode(), status, time.time()))
                 return {'status': status, 'new_steps': added, 'bytes_read': consumed,
@@ -464,6 +482,38 @@ def token_report(connection, limit):
     return result
 
 
+def daily_report(day):
+    if not isinstance(day, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', day):
+        raise ValueError('usage --date exige YYYY-MM-DD')
+    try:
+        start = datetime.fromisoformat(day).astimezone().timestamp()
+        end = (datetime.fromisoformat(day) + timedelta(days=1)).astimezone().timestamp()
+    except ValueError as error:
+        raise ValueError('usage --date exige une date valide') from error
+    if not (root() / 'events.sqlite3').exists():
+        return {'date': day, 'state': 'unavailable', 'events': 0, 'synchronization': 'not_requested'}
+    with database(create=False) as connection:
+        connection.execute('BEGIN')
+        oldest = connection.execute('SELECT seq,at FROM events ORDER BY seq LIMIT 1').fetchone()
+        rotated = bool(oldest and oldest[0] > 1)
+        row = connection.execute('''SELECT COUNT(*),
+            SUM(json_extract(data,'$.reported_usage.input_tokens')),
+            SUM(json_extract(data,'$.reported_usage.cached_input_tokens')),
+            SUM(json_extract(data,'$.reported_usage.output_tokens'))
+            FROM events WHERE at>=? AND at<? AND source='codex' AND phase='tokens' ''', (start, end)).fetchone()
+        steps, inputs, cached, outputs = row
+        operations = connection.execute('''SELECT operation,COUNT(*) FROM events
+            WHERE at>=? AND at<? AND phase='end' GROUP BY operation ORDER BY COUNT(*) DESC LIMIT 10''',
+            (start, end)).fetchall()
+        return {'date': day, 'timezone': datetime.fromtimestamp(start).astimezone().tzname(),
+                'state': 'partial' if rotated and oldest[1] > start else 'observed',
+                'synchronization': 'not_requested', 'history_rotated': rotated,
+                'events': connection.execute('SELECT COUNT(*) FROM events WHERE at>=? AND at<?', (start, end)).fetchone()[0],
+                'tokens': {'steps': steps, 'input_tokens': inputs or 0, 'cached_input_tokens': cached or 0,
+                           'uncached_input_tokens': (inputs or 0) - (cached or 0), 'output_tokens': outputs or 0},
+                'top_operations': [{'id': name, 'count': count} for name, count in operations]}
+
+
 def report(limit=3):
     if type(limit) is not int or not 1 <= limit <= 20:
         raise ValueError('usage --limit doit être compris entre 1 et 20')
@@ -492,6 +542,8 @@ def report(limit=3):
         statuses = connection.execute("SELECT status,COUNT(*) FROM events WHERE phase='end' GROUP BY status").fetchall()
         top = connection.execute("SELECT source,operation,COUNT(*) FROM events WHERE phase='end' GROUP BY source,operation ORDER BY COUNT(*) DESC LIMIT 10").fetchall()
         pending = connection.execute("SELECT COUNT(*) FROM events s WHERE s.phase='start' AND s.call_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM events e WHERE e.source=s.source AND e.call_id=s.call_id AND e.phase='end')").fetchone()[0]
+        oldest = connection.execute('SELECT seq FROM events ORDER BY seq LIMIT 1').fetchone()
+        rotated = bool(oldest and oldest[0] > 1)
         result = {'events': sum(n for _, _, n in totals), 'by_source_phase': {s + ':' + p: n for s, p, n in totals},
                   'observed_turns': len(turns), 'repeat_inputs_in_turn': repeats,
                   'reused_sequences': sum(n - 1 for n in sequences.values()),
@@ -502,8 +554,13 @@ def report(limit=3):
                   'status_counts': {s or 'unknown': n for s, n in statuses},
                   'top_operations': [{'source': s, 'id': a, 'count': n} for s, a, n in top],
                   'assessment': 'descriptive_only_compare_rules_first', 'tokens': {**token_report(connection, limit), 'synchronization': synchronized},
-                  'task_completion': 'not_observed', 'database_bytes': (root() / 'events.sqlite3').stat().st_size,
+                  'task_completion': 'not_observed', 'history_rotated': rotated,
+                  'oldest_event_sequence': oldest[0] if oldest else None,
+                  'database_bytes': (root() / 'events.sqlite3').stat().st_size,
                   'database_cap_bytes': CAP_BYTES}
+        if rotated and result['tokens']['state'] != 'unavailable':
+            result['tokens']['state'] = 'partial'
+            result['tokens']['coverage'] = 'retained_window_only'
         return result
 
 

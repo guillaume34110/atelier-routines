@@ -56,6 +56,38 @@
     ]
   },
   {
+    "id": "code.index",
+    "kind": "command",
+    "description": "Indexer les références de code sous les racines locales autorisées.",
+    "command": "rtk proxy atelier-routines run code.index --params OBJET_JSON",
+    "boundary": "Index privé propre à chaque utilisateur ; aucun contenu source copié ni statut QA inventé. Signaler tout scan incomplet.",
+    "triggers": ["indexer code", "annuaire code", "référencer projets", "code index"]
+  },
+  {
+    "id": "code.find",
+    "kind": "command",
+    "description": "Retrouver les fichiers et fonctions existants dans les projets autorisés.",
+    "command": "rtk proxy atelier-routines run code.find --params OBJET_JSON",
+    "boundary": "Rafraîchit l'index local, renvoie chemins, symboles, empreintes et état courant ; QA non évaluée, réutilisation à vérifier dans la cible.",
+    "triggers": ["réutiliser code", "chercher code interprojet", "fonction existante", "code find"]
+  },
+  {
+    "id": "knowledge.record",
+    "kind": "command",
+    "description": "Conserver une conclusion de R&D, son contexte et la référence d'une preuve locale.",
+    "command": "rtk proxy atelier-routines run knowledge.record --params OBJET_JSON",
+    "boundary": "Registre privé ; résultat déclaré par l'agent, jamais certification automatique. Aucune source ou preuve copiée.",
+    "triggers": ["consigner R&D", "retenir expérience", "éviter erreur répétée", "knowledge record"]
+  },
+  {
+    "id": "knowledge.find",
+    "kind": "command",
+    "description": "Retrouver les conclusions de R&D par thème entre projets autorisés.",
+    "command": "rtk proxy atelier-routines run knowledge.find --params OBJET_JSON",
+    "boundary": "Vérifie la fraîcheur des preuves référencées ; une ancienne conclusion ne valide pas la nouvelle expérience.",
+    "triggers": ["chercher R&D", "savoir interprojet", "expérience passée", "knowledge find"]
+  },
+  {
     "id": "system.context",
     "kind": "command",
     "description": "Résumé du projet sans relire ses sources.",
