@@ -12,6 +12,7 @@ import re
 import secrets
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import threading
@@ -21,10 +22,26 @@ from decision_payload import MODEL_SHA, PROJECTOR_SHA, digest, require, summariz
 
 
 def private_json(path):
-    info = path.lstat()
-    require(not path.is_symlink() and info.st_uid==os.getuid() and info.st_mode&0o077==0 and info.st_size<32768,
-            'Configuration privée non sûre.')
-    return json.loads(path.read_text())
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, 'rb') as stream:
+        info = os.fstat(stream.fileno())
+        require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_uid == os.getuid()
+                and info.st_mode & 0o077 == 0 and info.st_size < 32768, 'Fichier JSON privé non sûr.')
+        raw = stream.read(32768)
+        require(len(raw) < 32768, 'Fichier JSON privé trop volumineux.')
+        return json.loads(raw)
+
+
+def model_directory():
+    return Path.home() / '.local/share/atelier-routines-models/d1'
+
+
+def read_endpoint():
+    endpoint = private_json(model_directory() / 'endpoint.json')
+    require(type(endpoint) is dict and type(endpoint.get('port')) is int and 1024 <= endpoint['port'] <= 65535,
+            'Port local invalide.')
+    require(endpoint.get('model_sha256') == MODEL_SHA and type(endpoint.get('token')) is str, 'Service d1 incompatible.')
+    return endpoint
 
 
 def write_private(path, value):

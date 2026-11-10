@@ -37,8 +37,10 @@ PR creation requires an already published, validated branch and its exact `head_
 Wait on the known execution; resume uncertain GitHub writes by reconciliation only, without resubmission.
 Use receipts for expanded results. Exact source/patch reads needed for editing and operations
 outside routine coverage remain direct; never substitute a statistical diff for a code review.
-The user hooks remind each prompt and subagent, and redirect supported simple shell inspections
-before execution. They do not execute routines themselves or inspect conversations.
+The user hooks remind each prompt and subagent and redirect supported simple shell inspections.
+`PreCompact` runs the local d1 selection for manual and automatic compaction when recent Atelier receipts qualify.
+After `PostCompact`, the next `SessionStart` with source `compact` can carry the selected execution IDs once.
+Use `executions.inspect` to recover a receipt. The native Codex summary still runs.
 
 When an authorised computation remains active, delegate waiting to its existing backend:
 `executions.wait(seconds=3600)` for a routine execution; `vps_wait(timeout=3600)` for a known VPS job;
