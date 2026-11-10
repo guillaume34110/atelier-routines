@@ -8,7 +8,7 @@ import time
 
 import executor as core
 from decision_payload import MODEL_SHA, digest, require, summarize, validate
-from decision_runtime import api, private_json
+from decision_runtime import api, model_directory, private_json, read_endpoint
 
 
 def route_candidates(query, entries):
@@ -47,10 +47,6 @@ def route_candidates(query, entries):
             return entries,{'backend':'d1-local','accepted':False,'fallback_required':True,'reason':'unavailable_or_invalid'}
 
 
-def model_directory():
-    return Path.home()/'.local/share/atelier-routines-models/d1'
-
-
 def payload(project, file=None, request=None):
     require((file is not None) != (request is not None),'Choisir exactement file ou input.')
     require(request is None or type(request) is dict,'input doit être un objet JSON.')
@@ -68,13 +64,6 @@ def payload(project, file=None, request=None):
             images.append('data:image/png;base64,'+base64.b64encode(raw).decode())
         data['images'] = images
     return validate(data)
-
-
-def read_endpoint():
-    endpoint = private_json(model_directory()/'endpoint.json')
-    require(type(endpoint.get('port')) is int and 1024<=endpoint['port']<=65535,'Port local invalide.')
-    require(endpoint.get('model_sha256')==MODEL_SHA and type(endpoint.get('token')) is str,'Service d1 incompatible.')
-    return endpoint
 
 
 def result(summary):

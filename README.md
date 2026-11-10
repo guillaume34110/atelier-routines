@@ -175,6 +175,12 @@ Python est conservé : les traces disponibles ne démontrent pas un problème qu
 
 La collecte sert à décider si des recettes et règles suffisent avant d’envisager un modèle. Aucun modèle ni entraînement n’est ajouté. Les appels MCP et CLI enregistrent début, fin, refus, durée et métadonnées du reçu. Cinq hooks silencieux ajoutent la phrase de demande, les outils observables et la collecte des compteurs lors des demandes, outils, fins et interruptions de tours, dans les racines déjà configurées. Les définitions nouvelles ou modifiées doivent être approuvées dans `/hooks`. La collecte de tokens n’exige pas un nouvel outil MCP.
 
+### Compaction assistée par d1
+
+L’installateur ajoute trois hooks. `PreCompact` soumet jusqu’à quatre reçus éligibles du chat au modèle d1 local avant un compactage manuel ou automatique. Il conserve les références en cas de doute ou si le modèle est indisponible. Les échecs, validations et exécutions en cours sont prioritaires. Après `PostCompact`, `SessionStart` transmet une fois la note de reprise. `executions.inspect` permet de retrouver les preuves.
+
+Le hook utilise les métadonnées des reçus dans le journal local. Codex continue de produire son résumé natif. La commande `atelier-routines usage` compte ces sélections sous `local-compaction`. [Hooks Codex](https://learn.chatgpt.com/docs/hooks#precompact).
+
 Les données restent dans `~/.local/share/atelier-routines-usage/events.sqlite3`, dossier 0700 et fichier 0600, avec un plafond SQLite de 64 Mio et un pic de journal temporaire pouvant approcher 128 Mio. `ATELIER_ROUTINES_STORE` déplace aussi ce store dans un dossier frère `-usage`. Aucune purge, aucun envoi de données et aucun processus de surveillance. `ATELIER_ROUTINES_USAGE=off` désactive les écritures pour le processus concerné ; les tests ordinaires les désactivent, les tests de collecte utilisent un store isolé.
 
 La phrase conservée est filtrée puis limitée à 280 caractères. Les paramètres et identifiants de session sont hachés avec une clé locale ; les commandes, contenus de fichiers et réponses brutes ne sont pas sauvegardés. Le filtrage de texte libre ne garantit pas de reconnaître tout secret : ne pas mettre de données sensibles dans une consigne de tâche. Les charges de hook trop grandes sont signalées comme perdues. Une écriture refusée est signalée sur stderr sans masquer le résultat de l’opération ni la relancer.

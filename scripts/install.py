@@ -2,6 +2,7 @@
 import importlib.metadata
 import argparse
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -10,22 +11,32 @@ import shlex
 import sys
 import tempfile
 import tomllib
+import zipfile
 
 import routines
 
 
-def hook_command(hook_dir, source, python, rtk, arguments=()):
+def hook_command(hook_dir, source, python, rtk, arguments=(), modules=()):
     content = Path(__file__).with_name(source).read_bytes()
+    suffix = 'py'
+    if modules:
+        # Keep every imported module under the same trust hash as the hook.
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, 'w') as archive:
+            archive.writestr(zipfile.ZipInfo('__main__.py'), content)
+            for module in modules:
+                archive.writestr(zipfile.ZipInfo(module), Path(__file__).with_name(module).read_bytes())
+        content, suffix = buffer.getvalue(), 'pyz'
     digest = hashlib.sha256(content).hexdigest()
     hook_dir.mkdir(parents=True, exist_ok=True)
-    target = hook_dir / f'atelier-routines-{digest}.py'
+    target = hook_dir / f'atelier-routines-{digest}.{suffix}'
     if target.is_symlink() or (target.exists() and target.read_bytes() != content):
         raise ValueError('Hook installé altéré : aucune écriture.')
     if not target.exists():
         with target.open('xb') as out:
             out.write(content)
         target.chmod(0o600)
-    return shlex.join([str(rtk), 'proxy', str(python), str(target), *arguments])
+    return shlex.join([str(rtk), 'proxy', str(python), *(['-I'] if modules else []), str(target), *arguments])
 
 
 def install_hooks(directory, python, rtk):
@@ -45,6 +56,8 @@ def install_hooks(directory, python, rtk):
     routing = hook_command(hook_dir, 'routing_hook.py', python, rtk, [roots])
     waiting = hook_command(hook_dir, 'wait_hook.py', python, rtk, [roots])
     collecting = hook_command(hook_dir, 'usage.py', python, rtk, ['--hook', roots])
+    compaction = hook_command(hook_dir, 'compact_hook.py', python, rtk, [roots],
+                              modules=('usage.py', 'decision_runtime.py', 'decision_payload.py'))
     hooks = data.setdefault('hooks', {})
     waits = r'^(Bash|exec_command|wait|functions\.wait|mcp__atelier[-_]vps__vps_wait|mcp__atelier[-_]routines__routines_run)$'
     for event, matcher, handler, label in [('SessionStart', '^(startup|resume|clear|compact|fork)$', command, ''),
@@ -57,7 +70,10 @@ def install_hooks(directory, python, rtk):
                                     ('PreToolUse', '.*', collecting, ' collecte'),
                                     ('PostToolUse', '.*', collecting, ' collecte'),
                                     ('Stop', '', collecting, ' collecte'),
-                                    ('Interrupt', '', collecting, ' collecte')]:
+                                    ('Interrupt', '', collecting, ' collecte'),
+                                    ('PreCompact', '^(auto|manual)$', compaction, ' d1'),
+                                    ('PostCompact', '^(auto|manual)$', compaction, ' d1'),
+                                    ('SessionStart', '^compact$', compaction, ' d1')]:
         message = f'Atelier routines: {event}{label}'
         groups = hooks.setdefault(event, [])
         owned = [group for group in groups if len(group.get('hooks', [])) == 1
@@ -65,9 +81,10 @@ def install_hooks(directory, python, rtk):
                  and 'atelier-routines-' in group['hooks'][0].get('command', '')]
         for group in owned:
             groups.remove(group)
+        timeout = 960 if event == 'PreToolUse' and label == ' attente longue' else 8 if event == 'PreCompact' else 5
+        context_limit = 1200 if event == 'SessionStart' and label == ' d1' else 220
         groups.append({'matcher': matcher, 'hooks': [{'type': 'command', 'command': handler,
-                       'timeout': 960 if event == 'PreToolUse' and label == ' attente longue' else 5,
-                       'additionalContextLimit': 220, 'statusMessage': message}]})
+                       'timeout': timeout, 'additionalContextLimit': context_limit, 'statusMessage': message}]})
     updated = (json.dumps(data, ensure_ascii=False, indent=2) + '\n').encode()
     if updated == original:
         return

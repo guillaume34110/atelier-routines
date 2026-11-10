@@ -48,7 +48,8 @@ class HookTest(unittest.TestCase):
             self.assertEqual(len(installed['hooks']['Stop']), 2)
             self.assertEqual(len(installed['hooks']['Interrupt']), 1)
             self.assertEqual(installed['description'], 'preserve')
-            self.assertEqual(len(installed['hooks']['SessionStart']), 1)
+            self.assertEqual([group['matcher'] for group in installed['hooks']['SessionStart']],
+                             ['^(startup|resume|clear|compact|fork)$', '^compact$'])
             self.assertEqual(len(installed['hooks']['PostToolUse']), 3)
             scripts = list((directory / 'hooks').glob('atelier-routines-*.py'))
             self.assertEqual(len(scripts), 4)
